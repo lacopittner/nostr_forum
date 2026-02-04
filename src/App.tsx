@@ -3,15 +3,17 @@ import { AppShell } from "./components/layout/AppShell";
 import { ArrowBigUp, ArrowBigDown, MessageSquare, Share2, MoreHorizontal, Send } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, useNavigate } from "react-router-dom";
 import { ProfilePage } from "./pages/ProfilePage";
 import { SearchPage } from "./pages/SearchPage";
 import { RelayManagementPage } from "./pages/RelayManagementPage";
 import { CommunitiesPage } from "./pages/CommunitiesPage";
 import { CommunityDetailPage } from "./pages/CommunityDetailPage";
+import { PostDetailPage } from "./pages/PostDetailPage";
 
 function Feed() {
   const { ndk, user } = useNostr();
+  const navigate = useNavigate();
   const [posts, setPosts] = useState<NDKEvent[]>([]);
   const [reactions, setReactions] = useState<Record<string, number>>({});
   const [userVotes, setUserVotes] = useState<Record<string, "UPVOTE" | "DOWNVOTE" | null>>({});
@@ -22,6 +24,8 @@ function Feed() {
   const [replyContent, setReplyContent] = useState("");
   const [postVoters, setPostVoters] = useState<Record<string, { up: string[], down: string[] }>>({});
   const [profiles, setProfiles] = useState<Record<string, any>>({});
+  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
+  const [sortBy, setSortBy] = useState<"hot" | "new" | "top">("hot");
 
   const seenEventIds = useRef(new Set<string>());
   const reactionMap = useRef<Record<string, Record<string, { id: string, content: string, created_at: number }>>>({});
@@ -76,13 +80,9 @@ function Feed() {
 
   // Fetch posts and reactions
   useEffect(() => {
-    // We don't clear seenEventIds here to prevent duplicates on re-renders, 
-    // but the effect depends on ndk change which might mean a reconnect.
-    // However, usually NDK is stable.
-
     // Subscribe to Kind 1 (Posts)
     const postSub = ndk.subscribe(
-      { kinds: [NDKKind.Text], limit: 20 },
+      { kinds: [NDKKind.Text], limit: 50 },
       { closeOnEose: false }
     );
 
@@ -93,8 +93,23 @@ function Feed() {
       fetchProfile(event.pubkey);
 
       setPosts((prev) => {
-        const newPosts = [event, ...prev].sort((a, b) => b.created_at! - a.created_at!);
-        return newPosts.slice(0, 50);
+        const newPosts = [...prev, event];
+        return sortPosts(newPosts, sortBy).slice(0, 50);
+      });
+
+      // Fetch comment count for this post
+      const commentSub = ndk.subscribe(
+        { kinds: [NDKKind.Text], "#e": [event.id], limit: 100 },
+        { closeOnEose: true }
+      );
+      
+      let count = 0;
+      commentSub.on("event", () => {
+        count++;
+      });
+      
+      commentSub.on("eose", () => {
+        setCommentCounts(prev => ({ ...prev, [event.id]: count }));
       });
 
       // Target specific reactions for this new post
@@ -154,7 +169,6 @@ function Feed() {
       const targetIds = event.tags.filter(t => t[0] === "e").map(t => t[1]);
       let changed = false;
 
-      // Check if any of these deletions target a reaction we know about
       for (const targetId of targetIds) {
         for (const [postId, users] of Object.entries(reactionMap.current)) {
           for (const [pubkey, reaction] of Object.entries(users)) {
@@ -174,7 +188,35 @@ function Feed() {
       reactionSub.stop();
       deletionSub.stop();
     };
-  }, [ndk, updateScores]);
+  }, [ndk, updateScores, sortBy]);
+
+  const sortPosts = (postList: NDKEvent[], sort: "hot" | "new" | "top"): NDKEvent[] => {
+    return [...postList].sort((a, b) => {
+      if (sort === "new") {
+        return (b.created_at || 0) - (a.created_at || 0);
+      } else if (sort === "top") {
+        const scoreA = reactions[a.id] || 0;
+        const scoreB = reactions[b.id] || 0;
+        if (scoreB !== scoreA) return scoreB - scoreA;
+        return (b.created_at || 0) - (a.created_at || 0);
+      } else {
+        // Hot - combination of score and recency
+        const scoreA = reactions[a.id] || 0;
+        const scoreB = reactions[b.id] || 0;
+        const ageA = Date.now() / 1000 - (a.created_at || 0);
+        const ageB = Date.now() / 1000 - (b.created_at || 0);
+        // Simple hot algorithm: score / log(age + 2)
+        const hotA = scoreA / Math.log(ageA + 2);
+        const hotB = scoreB / Math.log(ageB + 2);
+        return hotB - hotA;
+      }
+    });
+  };
+
+  // Re-sort when sort option changes
+  useEffect(() => {
+    setPosts(prev => sortPosts(prev, sortBy));
+  }, [sortBy, reactions]);
 
   const handleCreatePost = async () => {
     if (!newPostContent.trim() || !user || isPublishing) return;
@@ -343,6 +385,28 @@ function Feed() {
         </div>
       )}
       
+      {/* Sorting Controls */}
+      {posts.length > 0 && (
+        <div className="flex items-center justify-between bg-card border rounded-xl p-3 shadow-sm">
+          <span className="text-sm font-bold text-gray-400">Sort by:</span>
+          <div className="flex items-center gap-2">
+            {(["hot", "new", "top"] as const).map((sort) => (
+              <button
+                key={sort}
+                onClick={() => setSortBy(sort)}
+                className={`px-4 py-1.5 rounded-full text-sm font-bold capitalize transition-all ${
+                  sortBy === sort
+                    ? "bg-orange-600 text-white"
+                    : "bg-accent/50 text-gray-400 hover:bg-accent"
+                }`}
+              >
+                {sort}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      
       <div className="flex flex-col space-y-4">
         {posts.map((post) => (
           <div key={post.id} className="bg-card border rounded-xl shadow-sm hover:border-orange-500/20 transition-all group">
@@ -369,7 +433,7 @@ function Feed() {
                   <ArrowBigDown size={24} fill={userVotes[post.id] === "DOWNVOTE" ? "currentColor" : "none"} />
                 </button>
               </div>
-              <div className="p-4 flex-1">
+              <div className="p-4 flex-1 cursor-pointer" onClick={() => navigate(`/post/${post.id}`)}>
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground mb-2">
                   <div className="flex items-center space-x-1">
                     <div className="w-4 h-4 bg-orange-600 rounded-full overflow-hidden">
@@ -380,7 +444,7 @@ function Feed() {
                     <span className="font-bold text-foreground lowercase">r/nostr</span>
                   </div>
                   <span>•</span>
-                  <span className="hover:underline cursor-pointer font-medium text-foreground">
+                  <span className="hover:underline font-medium text-foreground">
                     {profiles[post.pubkey]?.displayName || profiles[post.pubkey]?.name || post.pubkey.slice(0, 8)}
                   </span>
                   <span>•</span>
@@ -415,23 +479,47 @@ function Feed() {
 
                 <div className="flex items-center gap-4">
                   <button 
-                    onClick={() => setReplyingTo(replyingTo === post.id ? null : post.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setReplyingTo(replyingTo === post.id ? null : post.id);
+                    }}
                     className="flex items-center space-x-1.5 px-3 py-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground hover:text-foreground"
                   >
                     <MessageSquare size={16} />
                     <span className="text-xs font-bold">Reply</span>
                   </button>
-                  <button className="flex items-center space-x-1.5 px-3 py-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground hover:text-foreground">
+                  
+                  {/* Comment Count */}
+                  <div 
+                    className="flex items-center space-x-1.5 px-3 py-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground hover:text-foreground cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/post/${post.id}`);
+                    }}
+                  >
+                    <MessageSquare size={16} />
+                    <span className="text-xs font-bold">
+                      {commentCounts[post.id] !== undefined ? `${commentCounts[post.id]} comments` : "View comments"}
+                    </span>
+                  </div>
+                  
+                  <button 
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground hover:text-foreground"
+                  >
                     <Share2 size={16} />
                     <span className="text-xs font-bold">Share</span>
                   </button>
-                  <button className="p-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground">
+                  <button 
+                    onClick={(e) => e.stopPropagation()}
+                    className="p-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground"
+                  >
                     <MoreHorizontal size={16} />
                   </button>
                 </div>
 
                 {replyingTo === post.id && (
-                  <div className="mt-4 space-y-3 p-3 bg-accent/20 rounded-lg">
+                  <div className="mt-4 space-y-3 p-3 bg-accent/20 rounded-lg" onClick={(e) => e.stopPropagation()}>
                     <textarea
                       value={replyContent}
                       onChange={(e) => setReplyContent(e.target.value)}
@@ -471,6 +559,7 @@ function App() {
         <AppShell>
           <Routes>
             <Route path="/" element={<Feed />} />
+            <Route path="/post/:postId" element={<PostDetailPage />} />
             <Route path="/profile/:pubkey" element={<ProfilePage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/relays" element={<RelayManagementPage />} />
