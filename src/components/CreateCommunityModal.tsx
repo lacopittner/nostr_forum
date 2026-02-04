@@ -16,6 +16,8 @@ export function CreateCommunityModal({ exit }: CreateCommunityModalProps) {
   const [rules, setRules] = useState("");
   const [moderators, setModerators] = useState<string[]>([]);
   const [newModerator, setNewModerator] = useState("");
+  const [flairs, setFlairs] = useState<string[]>([]);
+  const [newFlair, setNewFlair] = useState("");
   const [isPublishing, setIsPublishing] = useState(false);
   const [error, setError] = useState("");
 
@@ -47,6 +49,13 @@ export function CreateCommunityModal({ exit }: CreateCommunityModalProps) {
       // Add owner as first moderator (optional, owner is implicit)
       tags.push(["p", user.pubkey, "", "moderator"]);
       
+      // Add flairs
+      flairs.forEach(flair => {
+        if (flair.trim()) {
+          tags.push(["flair", flair.trim()]);
+        }
+      });
+      
       // Add additional moderators
       moderators.forEach(mod => {
         if (mod.trim()) {
@@ -75,6 +84,17 @@ export function CreateCommunityModal({ exit }: CreateCommunityModalProps) {
 
   const handleRemoveModerator = (index: number) => {
     setModerators(moderators.filter((_, i) => i !== index));
+  };
+
+  const handleAddFlair = () => {
+    if (newFlair.trim() && !flairs.includes(newFlair.trim())) {
+      setFlairs([...flairs, newFlair.trim()]);
+      setNewFlair("");
+    }
+  };
+
+  const handleRemoveFlair = (index: number) => {
+    setFlairs(flairs.filter((_, i) => i !== index));
   };
 
   return (
@@ -192,6 +212,46 @@ export function CreateCommunityModal({ exit }: CreateCommunityModalProps) {
                       className="p-1.5 text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
                     >
                       <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Flairs */}
+          <div>
+            <label className="block text-sm font-semibold mb-2">Flairs/Tags</label>
+            <p className="text-xs text-gray-400 mb-2">Add flair options for posts (optional)</p>
+            
+            <div className="flex gap-2 mb-2">
+              <input
+                type="text"
+                value={newFlair}
+                onChange={(e) => setNewFlair(e.target.value)}
+                placeholder="e.g., Discussion, Meme, News"
+                className="flex-1 bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-orange-500 outline-none text-sm"
+              />
+              <button
+                onClick={handleAddFlair}
+                disabled={!newFlair.trim()}
+                className="px-4 py-2 bg-accent hover:bg-accent/70 rounded-lg transition-colors disabled:opacity-50"
+              >
+                <Plus size={20} />
+              </button>
+            </div>
+
+            {/* Flairs List */}
+            {flairs.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {flairs.map((flair, index) => (
+                  <div key={index} className="flex items-center gap-1 bg-orange-600/10 border border-orange-600/20 rounded-full px-3 py-1">
+                    <span className="text-sm text-orange-600">{flair}</span>
+                    <button
+                      onClick={() => handleRemoveFlair(index)}
+                      className="p-0.5 text-orange-600/60 hover:text-orange-600 transition-colors"
+                    >
+                      <Trash2 size={12} />
                     </button>
                   </div>
                 ))}

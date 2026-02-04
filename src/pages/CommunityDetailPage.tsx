@@ -2,11 +2,13 @@ import { useNostr } from "../providers/NostrProvider";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
-import { Edit2, Send, ArrowLeft, Shield, Users, ArrowBigUp, ArrowBigDown, Gavel } from "lucide-react";
+import { Edit2, Send, ArrowLeft, Shield, Users, ArrowBigUp, ArrowBigDown, Gavel, UserPlus, UserCheck } from "lucide-react";
 import { EditCommunityModal } from "../components/EditCommunityModal";
 import { ManageModeratorsModal } from "../components/ManageModeratorsModal";
 import { ManageBlockedUsersModal } from "../components/ManageBlockedUsersModal";
 import { useCommunityBlocks } from "../hooks/useCommunityBlocks";
+import { useCommunityMembership } from "../hooks/useCommunityMembership";
+import { FlairSelector } from "../components/FlairSelector";
 
 export function CommunityDetailPage() {
   const { ndk, user } = useNostr();
@@ -20,6 +22,11 @@ export function CommunityDetailPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showModeratorsModal, setShowModeratorsModal] = useState(false);
   const [showBlockedModal, setShowBlockedModal] = useState(false);
+  const [selectedFlair, setSelectedFlair] = useState<string | null>(null);
+  
+  // Membership
+  const { isMember, joinCommunity, leaveCommunity } = useCommunityMembership();
+  const [isJoining, setIsJoining] = useState(false);
   
   // Voting state
   const [reactions, setReactions] = useState<Record<string, number>>({});
@@ -41,6 +48,19 @@ export function CommunityDetailPage() {
   ) : false;
 
   const isOwner = community && user && community.pubkey === user.pubkey;
+  const hasJoined = community && isMember(community.pubkey, communityId || "");
+
+  const handleJoinLeave = async () => {
+    if (!user || !community || !communityId) return;
+    
+    setIsJoining(true);
+    if (hasJoined) {
+      await leaveCommunity(community.pubkey, communityId);
+    } else {
+      await joinCommunity(community.pubkey, communityId);
+    }
+    setIsJoining(false);
+  };
 
   // Fetch profile helper
   const fetchProfile = useCallback(async (pubkey: string) => {
@@ -153,10 +173,14 @@ export function CommunityDetailPage() {
   }, [community, ndk, pubkey, communityId, fetchProfile, updateScores]);
 
   const getCommunityInfo = () => {
-    if (!community) return { name: "", description: "", image: "", rules: "", moderators: [] as string[] };
+    if (!community) return { name: "", description: "", image: "", rules: "", moderators: [] as string[], flairs: [] as string[] };
     
     const moderators = community.tags
       .filter(t => t[0] === "p" && t[3] === "moderator")
+      .map(t => t[1]);
+    
+    const flairs = community.tags
+      .filter(t => t[0] === "flair")
       .map(t => t[1]);
     
     return {
@@ -164,7 +188,8 @@ export function CommunityDetailPage() {
       description: community.tags.find(t => t[0] === "description")?.[1] || "",
       image: community.tags.find(t => t[0] === "image")?.[1] || "",
       rules: community.tags.find(t => t[0] === "rules")?.[1] || "",
-      moderators
+      moderators,
+      flairs
     };
   };
 
@@ -188,6 +213,11 @@ export function CommunityDetailPage() {
         ["a", communityATag, community.pubkey, "root"],
         ["t", "community"]
       ];
+      
+      // Add flair if selected
+      if (selectedFlair) {
+        event.tags.push(["flair", selectedFlair]);
+      }
       
       await event.publish();
       setNewPostContent("");
@@ -361,6 +391,33 @@ export function CommunityDetailPage() {
                   </button>
                 </>
               )}
+              
+              {/* Join/Leave Button */}
+              {user && !isOwner && (
+                <button
+                  onClick={handleJoinLeave}
+                  disabled={isJoining}
+                  className={`flex items-center space-x-2 px-6 py-2 rounded-lg font-bold transition-all ${
+                    hasJoined
+                      ? "bg-accent text-foreground hover:bg-accent/70"
+                      : "bg-orange-600 text-white hover:bg-orange-700"
+                  } ${isJoining ? "opacity-50" : ""}`}
+                >
+                  {isJoining ? (
+                    <span>...</span>
+                  ) : hasJoined ? (
+                    <>
+                      <UserCheck size={16} />
+                      <span>Joined</span>
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus size={16} />
+                      <span>Join</span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
 
@@ -416,7 +473,14 @@ export function CommunityDetailPage() {
             placeholder="Share something with this community..."
             className="w-full bg-accent/50 border-none rounded-lg p-3 text-sm focus:ring-1 focus:ring-orange-500 min-h-[100px] resize-none overflow-hidden"
           />
-          <div className="mt-3 flex justify-end">
+          <div className="mt-3 flex items-center justify-between">
+            {/* Flair Selector */}
+            <FlairSelector
+              flairs={communityInfo.flairs}
+              selectedFlair={selectedFlair}
+              onSelect={setSelectedFlair}
+            />
+            
             <button
               onClick={handleCreatePost}
               disabled={isPublishing || !newPostContent.trim()}

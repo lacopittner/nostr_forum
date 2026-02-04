@@ -1,13 +1,67 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Home, LogIn, Menu, X, Sun, Moon, Search, User, Settings } from "lucide-react";
 import { useNostr } from "../../providers/NostrProvider";
 import { useNavigate } from "react-router-dom";
+import { NDKEvent } from "@nostr-dev-kit/ndk";
 
+interface Community {
+  id: string;
+  pubkey: string;
+  name: string;
+}
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, login, theme, toggleTheme } = useNostr();
+  const { user, login, theme, toggleTheme, ndk } = useNostr();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [myCommunities, setMyCommunities] = useState<Community[]>([]);
+
+  // Fetch user's communities
+  useEffect(() => {
+    if (!user || !ndk) {
+      setMyCommunities([]);
+      return;
+    }
+
+    const sub = ndk.subscribe(
+      {
+        kinds: [30001],
+        authors: [user.pubkey],
+        "#d": ["communities"]
+      },
+      { closeOnEose: true }
+    );
+
+    sub.on("event", (event: NDKEvent) => {
+      const communityRefs = event.tags
+        .filter(t => t[0] === "a")
+        .map(t => t[1])
+        .filter(atag => atag.startsWith("34550:"));
+
+      // Fetch community details
+      communityRefs.forEach(async (atag) => {
+        const [, pubkey, id] = atag.split(":");
+        const community = await ndk.fetchEvent({
+          kinds: [34550 as any],
+          authors: [pubkey],
+          "#d": [id]
+        });
+        
+        if (community) {
+          const name = community.tags.find(t => t[0] === "name")?.[1] || "Unnamed";
+          setMyCommunities(prev => {
+            const exists = prev.some(c => c.id === id && c.pubkey === pubkey);
+            if (exists) return prev;
+            return [...prev, { id, pubkey, name }];
+          });
+        }
+      });
+    });
+
+    return () => {
+      sub.stop();
+    };
+  }, [ndk, user]);
 
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
@@ -21,7 +75,10 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
             {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
           
-          <div className="flex items-center space-x-2 cursor-pointer group">
+          <div 
+            className="flex items-center space-x-2 cursor-pointer group"
+            onClick={() => navigate("/")}
+          >
             <div className="w-8 h-8 bg-orange-600 rounded-full flex items-center justify-center text-white font-black group-hover:bg-orange-500 transition-colors">N</div>
             <span className="font-bold text-lg tracking-tighter hidden sm:inline">nostr-reddit</span>
           </div>
@@ -108,7 +165,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
         `}>
           <div className="flex flex-col h-full p-4 space-y-6">
-          <div className="space-y-1">
+            <div className="space-y-1">
               <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest px-2 mb-3">Navigation</p>
               <div 
                 onClick={() => {
@@ -166,13 +223,42 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
               )}
             </div>
 
-            <div className="space-y-1 pt-6 border-t">
-              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest px-2 mb-3">Communities</p>
-              <div className="px-2 space-y-2">
-                <div className="text-xs text-muted-foreground italic bg-accent/30 p-4 rounded-lg border border-dashed text-center">
-                  Sign in to see your communities
+            <div className="space-y-1 pt-6 border-t flex-1 overflow-hidden">
+              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest px-2 mb-3">My Communities</p>
+              
+              {!user ? (
+                <div className="px-2">
+                  <div className="text-xs text-muted-foreground italic bg-accent/30 p-4 rounded-lg border border-dashed text-center">
+                    Sign in to see your communities
+                  </div>
                 </div>
-              </div>
+              ) : myCommunities.length === 0 ? (
+                <div className="px-2">
+                  <div className="text-xs text-muted-foreground italic bg-accent/30 p-4 rounded-lg border border-dashed text-center">
+                    Join communities to see them here
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1 max-h-48 overflow-y-auto scrollbar-thin">
+                  {myCommunities.map((community) => (
+                    <div
+                      key={`${community.pubkey}:${community.id}`}
+                      onClick={() => {
+                        navigate(`/community/${community.pubkey}/${community.id}`);
+                        setSidebarOpen(false);
+                      }}
+                      className="flex items-center space-x-3 p-2 rounded-lg cursor-pointer hover:bg-accent transition-all group"
+                    >
+                      <div className="w-6 h-6 bg-orange-600/20 rounded-full flex items-center justify-center">
+                        <span className="text-xs font-bold text-orange-600">{community.name[0].toUpperCase()}</span>
+                      </div>
+                      <span className="text-sm font-medium truncate group-hover:text-orange-500 transition-colors">
+                        r/{community.name}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </aside>

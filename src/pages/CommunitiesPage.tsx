@@ -2,17 +2,20 @@ import { useNostr } from "../providers/NostrProvider";
 import { useEffect, useState } from "react";
 import { NDKEvent } from "@nostr-dev-kit/ndk";
 import { useNavigate } from "react-router-dom";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, UserPlus, UserCheck } from "lucide-react";
 import { CreateCommunityModal } from "../components/CreateCommunityModal";
+import { useCommunityMembership } from "../hooks/useCommunityMembership";
 
 export function CommunitiesPage() {
   const { ndk, user } = useNostr();
   const navigate = useNavigate();
+  const { isMember, joinCommunity, leaveCommunity } = useCommunityMembership();
   const [communities, setCommunities] = useState<NDKEvent[]>([]);
   const [filteredCommunities, setFilteredCommunities] = useState<NDKEvent[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [joiningId, setJoiningId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchCommunities = async () => {
@@ -135,7 +138,21 @@ export function CommunitiesPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filteredCommunities.map((community) => {
             const { name, description, image, d } = getCommunityInfo(community);
-            const memberCount = Math.floor(Math.random() * 1000) + 1; // Placeholder
+            const isJoined = isMember(community.pubkey, d);
+            const isJoining = joiningId === `${community.pubkey}:${d}`;
+            
+            const handleJoinClick = async (e: React.MouseEvent) => {
+              e.stopPropagation();
+              if (!user) return;
+              
+              setJoiningId(`${community.pubkey}:${d}`);
+              if (isJoined) {
+                await leaveCommunity(community.pubkey, d);
+              } else {
+                await joinCommunity(community.pubkey, d);
+              }
+              setJoiningId(null);
+            };
             
             return (
               <div
@@ -154,16 +171,44 @@ export function CommunitiesPage() {
                 
                 {/* Community Info */}
                 <div>
-                  <h3 className="font-bold text-lg mb-2 group-hover:text-orange-500 transition-colors line-clamp-2">
-                    {name}
-                  </h3>
+                  <div className="flex items-start justify-between mb-2">
+                    <h3 className="font-bold text-lg group-hover:text-orange-500 transition-colors line-clamp-2">
+                      {name}
+                    </h3>
+                    
+                    {user && (
+                      <button
+                        onClick={handleJoinClick}
+                        disabled={isJoining}
+                        className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                          isJoined
+                            ? "bg-accent text-foreground hover:bg-accent/70"
+                            : "bg-orange-600 text-white hover:bg-orange-700"
+                        } ${isJoining ? "opacity-50" : ""}`}
+                      >
+                        {isJoining ? (
+                          <span>...</span>
+                        ) : isJoined ? (
+                          <>
+                            <UserCheck size={12} />
+                            <span>Joined</span>
+                          </>
+                        ) : (
+                          <>
+                            <UserPlus size={12} />
+                            <span>Join</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                  
                   <p className="text-gray-400 text-sm mb-4 line-clamp-2">
                     {description || "No description"}
                   </p>
                   
                   {/* Stats */}
                   <div className="flex items-center space-x-4 text-xs text-gray-400 pt-4 border-t border-accent">
-                    <span>👥 {memberCount} members</span>
                     <span>📅 {new Date((community.created_at || 0) * 1000).toLocaleDateString()}</span>
                   </div>
                 </div>
