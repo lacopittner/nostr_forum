@@ -2,13 +2,15 @@ import { useNostr } from "../providers/NostrProvider";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
-import { Edit2, Send, ArrowLeft, Shield, Users, ArrowBigUp, ArrowBigDown, Gavel, UserPlus, UserCheck } from "lucide-react";
+import { Edit2, Send, ArrowLeft, Shield, Users, ArrowBigUp, ArrowBigDown, Gavel, UserPlus, UserCheck, Search, Book } from "lucide-react";
 import { EditCommunityModal } from "../components/EditCommunityModal";
 import { ManageModeratorsModal } from "../components/ManageModeratorsModal";
 import { ManageBlockedUsersModal } from "../components/ManageBlockedUsersModal";
 import { useCommunityBlocks } from "../hooks/useCommunityBlocks";
 import { useCommunityMembership } from "../hooks/useCommunityMembership";
 import { FlairSelector } from "../components/FlairSelector";
+import { PostActionsMenu } from "../components/PostActionsMenu";
+import { CommunityWikiModal } from "../components/CommunityWikiModal";
 
 export function CommunityDetailPage() {
   const { ndk, user } = useNostr();
@@ -22,7 +24,13 @@ export function CommunityDetailPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showModeratorsModal, setShowModeratorsModal] = useState(false);
   const [showBlockedModal, setShowBlockedModal] = useState(false);
+  const [showWikiModal, setShowWikiModal] = useState(false);
   const [selectedFlair, setSelectedFlair] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filteredPosts, setFilteredPosts] = useState<NDKEvent[]>([]);
+  
+  // Track edited posts
+  const [editedPosts, setEditedPosts] = useState<Set<string>>(new Set());
   
   // Membership
   const { isMember, joinCommunity, leaveCommunity } = useCommunityMembership();
@@ -171,6 +179,83 @@ export function CommunityDetailPage() {
       postSub.stop();
     };
   }, [community, ndk, pubkey, communityId, fetchProfile, updateScores]);
+
+  // Filter posts by search query
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredPosts(posts);
+      return;
+    }
+    
+    const query = searchQuery.toLowerCase();
+    const filtered = posts.filter(post => 
+      post.content.toLowerCase().includes(query) ||
+      post.pubkey.toLowerCase().includes(query)
+    );
+    setFilteredPosts(filtered);
+  }, [searchQuery, posts]);
+
+  // Handle edit post
+  const handleEditPost = async (postId: string, newContent: string) => {
+    if (!user) return;
+    
+    try {
+      // Create a new event with the same ID (replacement)
+      const post = posts.find(p => p.id === postId);
+      if (!post) return;
+
+      const event = new NDKEvent(ndk);
+      event.kind = NDKKind.Text;
+      event.content = newContent;
+      event.tags = post.tags;
+      
+      // Add edited tag
+      if (!event.tags.find(t => t[0] === "edited")) {
+        event.tags.push(["edited", new Date().toISOString()]);
+      }
+
+      await event.publish();
+      
+      // Update local state - only update content, keep the rest of the event
+      setPosts(prev => prev.map(p => {
+        if (p.id === postId) {
+          // Create a new event with updated content
+          const updatedEvent = new NDKEvent(ndk);
+          updatedEvent.kind = p.kind;
+          updatedEvent.content = newContent;
+          updatedEvent.tags = [...p.tags];
+          updatedEvent.created_at = p.created_at;
+          return updatedEvent;
+        }
+        return p;
+      }));
+      setEditedPosts(prev => new Set(prev).add(postId));
+    } catch (error) {
+      console.error("Failed to edit post", error);
+      alert("Failed to edit post");
+    }
+  };
+
+  // Handle delete post
+  const handleDeletePost = async (postId: string) => {
+    if (!user) return;
+    
+    try {
+      const deletion = new NDKEvent(ndk);
+      deletion.kind = 5;
+      deletion.content = "Deleted by author";
+      deletion.tags = [["e", postId]];
+      
+      await deletion.publish();
+      
+      // Remove from local state
+      setPosts(prev => prev.filter(p => p.id !== postId));
+      setFilteredPosts(prev => prev.filter(p => p.id !== postId));
+    } catch (error) {
+      console.error("Failed to delete post", error);
+      alert("Failed to delete post");
+    }
+  };
 
   const getCommunityInfo = () => {
     if (!community) return { name: "", description: "", image: "", rules: "", moderators: [] as string[], flairs: [] as string[] };
@@ -335,6 +420,16 @@ export function CommunityDetailPage() {
           exit={() => setShowBlockedModal(false)}
         />
       )}
+      
+      {showWikiModal && (
+        <CommunityWikiModal
+          community={community}
+          communityId={communityId || ""}
+          isOwner={!!isOwner}
+          isModerator={!!isModerator}
+          exit={() => setShowWikiModal(false)}
+        />
+      )}
 
       {/* Back Button */}
       <button
@@ -418,6 +513,16 @@ export function CommunityDetailPage() {
                   )}
                 </button>
               )}
+              
+              {/* Wiki Button */}
+              <button
+                onClick={() => setShowWikiModal(true)}
+                className="flex items-center space-x-2 px-4 py-2 bg-accent hover:bg-accent/70 text-white rounded-lg transition-all"
+                title="Community Wiki"
+              >
+                <Book size={16} />
+                <span className="hidden sm:inline">Wiki</span>
+              </button>
             </div>
           </div>
 
@@ -495,13 +600,29 @@ export function CommunityDetailPage() {
 
       {/* Posts */}
       <div className="space-y-4">
-        {posts.length === 0 && (
+        {/* Search Posts */}
+        <div className="bg-card border rounded-xl p-4 shadow-sm">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <input
+              type="text"
+              placeholder="Search posts in this community..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-accent/50 border rounded-lg focus:ring-1 focus:ring-orange-500 text-sm"
+            />
+          </div>
+        </div>
+
+        {filteredPosts.length === 0 && (
           <div className="bg-card border rounded-xl p-12 text-center shadow-sm">
-            <p className="text-gray-400">No posts yet. Be the first!</p>
+            <p className="text-gray-400">
+              {searchQuery ? "No posts match your search" : "No posts yet. Be the first!"}
+            </p>
           </div>
         )}
 
-        {posts.map((post) => (
+        {filteredPosts.map((post) => (
           <div key={post.id} className="bg-card border rounded-xl shadow-sm hover:border-orange-500/20 transition-all group">
             <div className="flex">
               {/* Voting */}
@@ -529,17 +650,28 @@ export function CommunityDetailPage() {
               </div>
 
               <div className="p-4 flex-1">
-                <div className="flex items-center gap-2 text-xs text-gray-400 mb-2">
-                  <div className="w-6 h-6 bg-orange-600/20 rounded-full overflow-hidden flex items-center justify-center">
-                    {profiles[post.pubkey]?.image ? (
-                      <img src={profiles[post.pubkey].image} className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="text-xs font-bold text-orange-600">{post.pubkey.slice(0, 1).toUpperCase()}</span>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2 text-xs text-gray-400">
+                    <div className="w-6 h-6 bg-orange-600/20 rounded-full overflow-hidden flex items-center justify-center">
+                      {profiles[post.pubkey]?.image ? (
+                        <img src={profiles[post.pubkey].image} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-xs font-bold text-orange-600">{post.pubkey.slice(0, 1).toUpperCase()}</span>
+                      )}
+                    </div>
+                    <span className="font-mono">{post.pubkey.slice(0, 12)}...</span>
+                    <span>•</span>
+                    <span>{new Date((post.created_at || 0) * 1000).toLocaleString()}</span>
+                    {(editedPosts.has(post.id) || post.tags.find(t => t[0] === "edited")) && (
+                      <span className="text-orange-500 text-[10px]">(edited)</span>
                     )}
                   </div>
-                  <span className="font-mono">{post.pubkey.slice(0, 12)}...</span>
-                  <span>•</span>
-                  <span>{new Date((post.created_at || 0) * 1000).toLocaleString()}</span>
+                  
+                  <PostActionsMenu
+                    post={post}
+                    onEdit={handleEditPost}
+                    onDelete={handleDeletePost}
+                  />
                 </div>
                 
                 <p className="text-sm whitespace-pre-wrap">{post.content}</p>
