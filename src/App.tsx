@@ -10,6 +10,7 @@ import { RelayManagementPage } from "./pages/RelayManagementPage";
 import { CommunitiesPage } from "./pages/CommunitiesPage";
 import { CommunityDetailPage } from "./pages/CommunityDetailPage";
 import { PostDetailPage } from "./pages/PostDetailPage";
+import { SavePostButton } from "./components/SavePostButton";
 
 function Feed() {
   const { ndk, user } = useNostr();
@@ -510,6 +511,15 @@ function Feed() {
                     <Share2 size={16} />
                     <span className="text-xs font-bold">Share</span>
                   </button>
+                  
+                  {/* Save Button */}
+                  <div 
+                    onClick={(e) => e.stopPropagation()}
+                    className="px-3 py-1.5"
+                  >
+                    <SavePostButton post={post} size="sm" />
+                  </div>
+                  
                   <button 
                     onClick={(e) => e.stopPropagation()}
                     className="p-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground"

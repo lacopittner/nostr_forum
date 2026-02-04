@@ -11,6 +11,7 @@ import { useCommunityMembership } from "../hooks/useCommunityMembership";
 import { FlairSelector } from "../components/FlairSelector";
 import { PostActionsMenu } from "../components/PostActionsMenu";
 import { CommunityWikiModal } from "../components/CommunityWikiModal";
+import { SavePostButton } from "../components/SavePostButton";
 
 export function CommunityDetailPage() {
   const { ndk, user } = useNostr();
@@ -672,6 +673,8 @@ export function CommunityDetailPage() {
                     onEdit={handleEditPost}
                     onDelete={handleDeletePost}
                   />
+                  
+                  <SavePostButton post={post} size="sm" />
                 </div>
                 
                 <p className="text-sm whitespace-pre-wrap">{post.content}</p>
