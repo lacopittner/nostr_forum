@@ -15,7 +15,7 @@ export const ConnectionStatus: React.FC = () => {
     disconnected: {
       icon: <WifiOff size={16} />,
       text: "Disconnected",
-      className: "bg-orange-500/10 border-orange-500/20 text-orange-600",
+      className: "bg-[var(--primary)]/10 border-[var(--primary)]/20 text-[var(--primary)]",
       showRetry: true
     },
     error: {

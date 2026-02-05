@@ -20,7 +20,7 @@ export function FlairSelector({ flairs, selectedFlair, onSelect, disabled }: Fla
         disabled={disabled}
         className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
           selectedFlair
-            ? "bg-orange-600/20 text-orange-600 border border-orange-600/30"
+            ? "bg-[var(--primary)]/20 text-[var(--primary)] border border-[var(--primary)]/30"
             : "bg-accent/50 text-gray-400 border border-transparent hover:bg-accent"
         } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
       >
@@ -48,7 +48,7 @@ export function FlairSelector({ flairs, selectedFlair, onSelect, disabled }: Fla
                 setIsOpen(false);
               }}
               className={`w-full px-3 py-2 text-left text-sm hover:bg-accent transition-colors ${
-                !selectedFlair ? "bg-orange-600/10 text-orange-600" : ""
+                !selectedFlair ? "bg-[var(--primary)]/10 text-[var(--primary)]" : ""
               }`}
             >
               No flair
@@ -61,7 +61,7 @@ export function FlairSelector({ flairs, selectedFlair, onSelect, disabled }: Fla
                   setIsOpen(false);
                 }}
                 className={`w-full px-3 py-2 text-left text-sm hover:bg-accent transition-colors ${
-                  selectedFlair === flair ? "bg-orange-600/10 text-orange-600" : ""
+                  selectedFlair === flair ? "bg-[var(--primary)]/10 text-[var(--primary)]" : ""
                 }`}
               >
                 {flair}

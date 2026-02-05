@@ -105,7 +105,7 @@ export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
   if (isUploading) {
     return (
       <div className="flex flex-col items-center justify-center p-8 bg-accent/30 rounded-xl border-2 border-dashed border-accent">
-        <Loader2 size={32} className="animate-spin text-orange-600 mb-3" />
+        <Loader2 size={32} className="animate-spin text-[var(--primary)] mb-3" />
         <p className="text-sm font-medium text-muted-foreground">Uploading image...</p>
         {preview && (
           <img
@@ -126,7 +126,7 @@ export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
       onClick={() => fileInputRef.current?.click()}
       className={`relative flex flex-col items-center justify-center p-8 rounded-xl border-2 border-dashed cursor-pointer transition-all ${
         isDragging
-          ? "bg-orange-500/10 border-orange-500"
+          ? "bg-[var(--primary)]/10 border-[var(--primary)]"
           : "bg-accent/30 border-accent hover:bg-accent/50"
       }`}
     >
@@ -153,7 +153,7 @@ export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
       <ImageIcon
         size={32}
         className={`mb-3 transition-colors ${
-          isDragging ? "text-orange-600" : "text-muted-foreground"
+          isDragging ? "text-[var(--primary)]" : "text-muted-foreground"
         }`}
       />
 
@@ -172,7 +172,7 @@ export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
-          className="text-orange-600 hover:underline"
+          className="text-[var(--primary)] hover:underline"
         >
           nostr.build
         </a>

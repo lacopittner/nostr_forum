@@ -77,7 +77,7 @@ export function EditCommunityModal({ community, exit }: EditCommunityModalProps)
           <p className="text-gray-400 mb-4">Only the community owner can edit community settings.</p>
           <button
             onClick={exit}
-            className="w-full px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-all"
+            className="w-full px-4 py-2 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-dark)] transition-all"
           >
             Close
           </button>
@@ -120,7 +120,7 @@ export function EditCommunityModal({ community, exit }: EditCommunityModalProps)
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Community name"
-              className="w-full bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-orange-500 outline-none"
+              className="w-full bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-[var(--primary)] outline-none"
               maxLength={100}
             />
             <p className="text-xs text-gray-400 mt-1">{name.length}/100</p>
@@ -133,7 +133,7 @@ export function EditCommunityModal({ community, exit }: EditCommunityModalProps)
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Community description"
-              className="w-full bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-orange-500 outline-none min-h-[80px] resize-none"
+              className="w-full bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-[var(--primary)] outline-none min-h-[80px] resize-none"
               maxLength={500}
             />
             <p className="text-xs text-gray-400 mt-1">{description.length}/500</p>
@@ -147,7 +147,7 @@ export function EditCommunityModal({ community, exit }: EditCommunityModalProps)
               value={image}
               onChange={(e) => setImage(e.target.value)}
               placeholder="https://example.com/image.jpg"
-              className="w-full bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-orange-500 outline-none"
+              className="w-full bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-[var(--primary)] outline-none"
             />
             {image && (
               <img
@@ -166,7 +166,7 @@ export function EditCommunityModal({ community, exit }: EditCommunityModalProps)
               value={rules}
               onChange={(e) => setRules(e.target.value)}
               placeholder="Community rules"
-              className="w-full bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-orange-500 outline-none min-h-[80px] resize-none"
+              className="w-full bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-[var(--primary)] outline-none min-h-[80px] resize-none"
               maxLength={500}
             />
             <p className="text-xs text-gray-400 mt-1">{rules.length}/500</p>
@@ -185,7 +185,7 @@ export function EditCommunityModal({ community, exit }: EditCommunityModalProps)
           <button
             onClick={handleUpdateCommunity}
             disabled={isPublishing || !name.trim()}
-            className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-all disabled:opacity-50 font-bold"
+            className="flex-1 px-4 py-2 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-dark)] transition-all disabled:opacity-50 font-bold"
           >
             {isPublishing ? "Updating..." : "Update Community"}
           </button>

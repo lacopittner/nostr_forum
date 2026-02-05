@@ -56,7 +56,7 @@ export const BottomNav: React.FC = () => {
               }}
               className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-accent transition-colors text-left"
             >
-              <div className="w-10 h-10 bg-orange-600 rounded-full flex items-center justify-center">
+              <div className="w-10 h-10 bg-[var(--primary)] rounded-full flex items-center justify-center">
                 <Users size={20} className="text-white" />
               </div>
               <div>
@@ -102,8 +102,8 @@ export const BottomNav: React.FC = () => {
                   onClick={() => handleNav(null, true)}
                   className={`flex items-center justify-center w-12 h-12 rounded-full transition-all ${
                     showCreateMenu 
-                      ? "bg-orange-600 text-white rotate-45" 
-                      : "bg-orange-600 text-white hover:bg-orange-700"
+                      ? "bg-[var(--primary)] text-white rotate-45" 
+                      : "bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)]"
                   }`}
                 >
                   <Plus size={24} />
@@ -117,7 +117,7 @@ export const BottomNav: React.FC = () => {
                 onClick={() => handleNav(item.path)}
                 className={`flex flex-col items-center justify-center flex-1 h-full transition-colors ${
                   active 
-                    ? "text-orange-600" 
+                    ? "text-[var(--primary)]" 
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >

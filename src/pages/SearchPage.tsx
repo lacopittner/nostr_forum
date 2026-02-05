@@ -124,7 +124,7 @@ export function SearchPage() {
       {/* Header */}
       <button
         onClick={() => navigate("/")}
-        className="flex items-center gap-2 text-orange-600 hover:text-orange-700 font-bold"
+        className="flex items-center gap-2 text-[var(--primary)] hover:text-[var(--primary-dark)] font-bold"
       >
         <ArrowLeft size={20} />
         Back
@@ -139,7 +139,7 @@ export function SearchPage() {
             value={query}
             onChange={handleSearchChange}
             placeholder="Search hashtags, users, or content..."
-            className="w-full bg-accent/50 border-none rounded-lg pl-10 pr-4 py-2 text-sm focus:ring-1 focus:ring-orange-500"
+            className="w-full bg-accent/50 border-none rounded-lg pl-10 pr-4 py-2 text-sm focus:ring-1 focus:ring-[var(--primary)]"
           />
         </div>
       </div>
@@ -155,7 +155,7 @@ export function SearchPage() {
             }}
             className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${
               resultType === type
-                ? "bg-orange-600 text-white"
+                ? "bg-[var(--primary)] text-white"
                 : "bg-accent text-foreground hover:bg-accent/80"
             }`}
           >
@@ -190,11 +190,11 @@ export function SearchPage() {
                   navigate(`/profile/${result.pubkey}`);
                 }
               }}
-              className="bg-card border rounded-xl p-4 shadow-sm hover:border-orange-500/50 cursor-pointer transition-all"
+              className="bg-card border rounded-xl p-4 shadow-sm hover:border-[var(--primary)]/50 cursor-pointer transition-all"
             >
               {result.type === "hashtag" && (
                 <div className="flex items-center gap-2">
-                  <span className="text-orange-600 font-bold">#{result.tag}</span>
+                  <span className="text-[var(--primary)] font-bold">#{result.tag}</span>
                 </div>
               )}
               {result.type === "user" && (

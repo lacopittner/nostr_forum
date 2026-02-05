@@ -328,7 +328,7 @@ export function CommunityDetailPage() {
         <p className="text-gray-400 mb-4">Community not found</p>
         <button
           onClick={() => navigate("/communities")}
-          className="px-6 py-2 bg-orange-600 text-white rounded-full font-bold hover:bg-orange-700"
+          className="px-6 py-2 bg-[var(--primary)] text-white rounded-full font-bold hover:bg-[var(--primary-dark)]"
         >
           Back to Communities
         </button>
@@ -373,7 +373,7 @@ export function CommunityDetailPage() {
       {/* Back Button */}
       <button
         onClick={() => navigate("/communities")}
-        className="flex items-center space-x-2 text-orange-500 hover:text-orange-600 transition-colors"
+        className="flex items-center space-x-2 text-[var(--primary)] hover:text-[var(--primary)] transition-colors"
       >
         <ArrowLeft size={20} />
         <span>Back to Communities</span>
@@ -400,7 +400,7 @@ export function CommunityDetailPage() {
                 <>
                   <button
                     onClick={() => setShowEditModal(true)}
-                    className="flex items-center space-x-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-all"
+                    className="flex items-center space-x-2 px-4 py-2 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-dark)] transition-all"
                   >
                     <Edit2 size={16} />
                     <span>Edit</span>
@@ -434,7 +434,7 @@ export function CommunityDetailPage() {
                   className={`flex items-center space-x-2 px-6 py-2 rounded-lg font-bold transition-all ${
                     hasJoined
                       ? "bg-accent text-foreground hover:bg-accent/70"
-                      : "bg-orange-600 text-white hover:bg-orange-700"
+                      : "bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)]"
                   } ${isJoining ? "opacity-50" : ""}`}
                 >
                   {isJoining ? (
@@ -469,7 +469,7 @@ export function CommunityDetailPage() {
           {communityInfo.moderators.length > 0 && (
             <div className="mb-4">
               <div className="flex items-center gap-2 text-sm text-gray-400 mb-2">
-                <Shield size={14} className="text-orange-500" />
+                <Shield size={14} className="text-[var(--primary)]" />
                 <span>Moderators:</span>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -479,7 +479,7 @@ export function CommunityDetailPage() {
                     className="text-xs px-2 py-1 bg-accent/50 rounded-md font-mono"
                   >
                     {mod.slice(0, 16)}...{mod.slice(-4)}
-                    {mod === community.pubkey && <span className="text-orange-500 ml-1">(owner)</span>}
+                    {mod === community.pubkey && <span className="text-[var(--primary)] ml-1">(owner)</span>}
                   </span>
                 ))}
               </div>
@@ -521,7 +521,7 @@ export function CommunityDetailPage() {
             value={newPostContent}
             onChange={(e) => setNewPostContent(e.target.value)}
             placeholder="Share something with this community..."
-            className="w-full bg-accent/50 border-none rounded-lg p-3 text-sm focus:ring-1 focus:ring-orange-500 min-h-[100px] resize-none overflow-hidden"
+            className="w-full bg-accent/50 border-none rounded-lg p-3 text-sm focus:ring-1 focus:ring-[var(--primary)] min-h-[100px] resize-none overflow-hidden"
           />
           <div className="mt-3 flex items-center justify-between">
             {/* Flair Selector */}
@@ -534,7 +534,7 @@ export function CommunityDetailPage() {
             <button
               onClick={handleCreatePost}
               disabled={isPublishing || !newPostContent.trim()}
-              className="flex items-center space-x-2 px-6 py-2 bg-orange-600 text-white rounded-full font-bold text-sm hover:bg-orange-700 disabled:opacity-50 transition-all"
+              className="flex items-center space-x-2 px-6 py-2 bg-[var(--primary)] text-white rounded-full font-bold text-sm hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all"
             >
               {isPublishing ? (
                 <>
@@ -570,7 +570,7 @@ export function CommunityDetailPage() {
               placeholder="Search posts in this community..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-accent/50 border rounded-lg focus:ring-1 focus:ring-orange-500 text-sm"
+              className="w-full pl-10 pr-4 py-2 bg-accent/50 border rounded-lg focus:ring-1 focus:ring-[var(--primary)] text-sm"
             />
           </div>
         </div>
@@ -584,19 +584,19 @@ export function CommunityDetailPage() {
         )}
 
         {filteredPosts.map((post) => (
-          <div key={post.id} className="bg-card border rounded-xl shadow-sm hover:border-orange-500/20 transition-all group">
+          <div key={post.id} className="bg-card border rounded-xl shadow-sm hover:border-[var(--primary)]/20 transition-all group">
             <div className="flex">
               {/* Voting */}
               <div className="w-12 bg-accent/30 flex flex-col items-center py-4 space-y-1 rounded-l-xl">
                 <button 
                   onClick={() => handleVote(post, "UPVOTE")}
                   disabled={votingIds.has(post.id)}
-                  className={`transition-colors ${userVotes[post.id] === "UPVOTE" ? "text-orange-600" : "text-muted-foreground hover:text-orange-600"} ${votingIds.has(post.id) ? "opacity-50 cursor-not-allowed" : ""}`}
+                  className={`transition-colors ${userVotes[post.id] === "UPVOTE" ? "text-[var(--primary)]" : "text-muted-foreground hover:text-[var(--primary)]"} ${votingIds.has(post.id) ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
                   <ArrowBigUp size={24} fill={userVotes[post.id] === "UPVOTE" ? "currentColor" : "none"} />
                 </button>
                 <span className={`text-[13px] font-black ${
-                  userVotes[post.id] === "UPVOTE" ? "text-orange-600" : 
+                  userVotes[post.id] === "UPVOTE" ? "text-[var(--primary)]" : 
                   userVotes[post.id] === "DOWNVOTE" ? "text-blue-600" : ""
                 }`}>
                   {reactions[post.id] || 0}
@@ -613,18 +613,18 @@ export function CommunityDetailPage() {
               <div className="p-4 flex-1">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2 text-xs text-gray-400">
-                    <div className="w-6 h-6 bg-orange-600/20 rounded-full overflow-hidden flex items-center justify-center">
+                    <div className="w-6 h-6 bg-[var(--primary)]/20 rounded-full overflow-hidden flex items-center justify-center">
                       {profiles[post.pubkey]?.image ? (
                         <img src={profiles[post.pubkey].image} className="w-full h-full object-cover" />
                       ) : (
-                        <span className="text-xs font-bold text-orange-600">{post.pubkey.slice(0, 1).toUpperCase()}</span>
+                        <span className="text-xs font-bold text-[var(--primary)]">{post.pubkey.slice(0, 1).toUpperCase()}</span>
                       )}
                     </div>
                     <span className="font-mono">{post.pubkey.slice(0, 12)}...</span>
                     <span>•</span>
                     <span>{new Date((post.created_at || 0) * 1000).toLocaleString()}</span>
                     {(editedPosts.has(post.id) || post.tags.find(t => t[0] === "edited")) && (
-                      <span className="text-orange-500 text-[10px]">(edited)</span>
+                      <span className="text-[var(--primary)] text-[10px]">(edited)</span>
                     )}
                   </div>
                   

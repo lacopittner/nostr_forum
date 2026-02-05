@@ -129,7 +129,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
                 onClick={() => setActiveTab("extension")}
                 className={`flex-1 py-2 px-4 rounded-lg font-bold text-sm transition-all ${
                   activeTab === "extension"
-                    ? "bg-orange-600 text-white"
+                    ? "bg-[var(--primary)] text-white"
                     : "bg-accent/50 text-muted-foreground hover:bg-accent"
                 }`}
               >
@@ -142,7 +142,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
                 onClick={() => setActiveTab("nsec")}
                 className={`flex-1 py-2 px-4 rounded-lg font-bold text-sm transition-all ${
                   activeTab === "nsec"
-                    ? "bg-orange-600 text-white"
+                    ? "bg-[var(--primary)] text-white"
                     : "bg-accent/50 text-muted-foreground hover:bg-accent"
                 }`}
               >
@@ -169,7 +169,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
                 <button
                   onClick={handleExtensionLogin}
                   disabled={isLoading}
-                  className="w-full py-3 bg-orange-600 text-white rounded-lg font-bold hover:bg-orange-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                  className="w-full py-3 bg-[var(--primary)] text-white rounded-lg font-bold hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
                 >
                   {isLoading ? "Connecting..." : "Connect with Extension"}
                 </button>
@@ -180,7 +180,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
                     href="https://getalby.com"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-orange-600 hover:underline"
+                    className="text-[var(--primary)] hover:underline"
                   >
                     Get Alby
                   </a>
@@ -204,7 +204,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
                     value={nsec}
                     onChange={(e) => setNsec(e.target.value)}
                     placeholder="nsec1..."
-                    className="w-full bg-accent/50 border-none rounded-lg px-3 py-3 text-sm focus:ring-2 focus:ring-orange-500 font-mono"
+                    className="w-full bg-accent/50 border-none rounded-lg px-3 py-3 text-sm focus:ring-2 focus:ring-[var(--primary)] font-mono"
                     onKeyDown={(e) => e.key === "Enter" && handleNsecLogin()}
                   />
                 </div>
@@ -212,7 +212,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
                 <button
                   onClick={handleNsecLogin}
                   disabled={isLoading || !nsec.trim()}
-                  className="w-full py-3 bg-orange-600 text-white rounded-lg font-bold hover:bg-orange-700 disabled:opacity-50 transition-all"
+                  className="w-full py-3 bg-[var(--primary)] text-white rounded-lg font-bold hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all"
                 >
                   {isLoading ? "Validating..." : "Continue"}
                 </button>
@@ -246,7 +246,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
                 onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
                 placeholder="Enter PIN"
                 maxLength={6}
-                className="w-full bg-accent/50 border-none rounded-lg px-3 py-3 text-sm focus:ring-2 focus:ring-orange-500 text-center text-2xl tracking-widest"
+                className="w-full bg-accent/50 border-none rounded-lg px-3 py-3 text-sm focus:ring-2 focus:ring-[var(--primary)] text-center text-2xl tracking-widest"
               />
             </div>
             
@@ -258,7 +258,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
                 onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ""))}
                 placeholder="Confirm PIN"
                 maxLength={6}
-                className="w-full bg-accent/50 border-none rounded-lg px-3 py-3 text-sm focus:ring-2 focus:ring-orange-500 text-center text-2xl tracking-widest"
+                className="w-full bg-accent/50 border-none rounded-lg px-3 py-3 text-sm focus:ring-2 focus:ring-[var(--primary)] text-center text-2xl tracking-widest"
                 onKeyDown={(e) => e.key === "Enter" && handleNsecLogin()}
               />
             </div>
@@ -273,7 +273,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
               <button
                 onClick={handleNsecLogin}
                 disabled={isLoading || pin.length < 4 || pin !== confirmPin}
-                className="flex-1 py-3 bg-orange-600 text-white rounded-lg font-bold hover:bg-orange-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                className="flex-1 py-3 bg-[var(--primary)] text-white rounded-lg font-bold hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
               >
                 <Lock size={16} />
                 {isLoading ? "Securing..." : "Secure & Login"}

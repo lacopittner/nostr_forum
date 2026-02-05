@@ -70,7 +70,7 @@ function parseText(content: string): ReactNode[] {
     if (IMAGE_REGEX.test(matched)) {
       // Skip images in text (they're rendered separately)
       parts.push(
-        <span key={`img-${match.index}`} className="text-orange-500 text-sm italic">
+        <span key={`img-${match.index}`} className="text-[var(--primary)] text-sm italic">
           [image]
         </span>
       );
@@ -80,7 +80,7 @@ function parseText(content: string): ReactNode[] {
         <a
           key={`mention-${match.index}`}
           href={`/profile/${npub}`}
-          className="text-orange-500 hover:underline font-medium"
+          className="text-[var(--primary)] hover:underline font-medium"
           onClick={(e) => {
             e.preventDefault();
             // Navigate programmatically
@@ -96,7 +96,7 @@ function parseText(content: string): ReactNode[] {
         <a
           key={`tag-${match.index}`}
           href={`/search?q=${tag}`}
-          className="text-orange-500 hover:underline"
+          className="text-[var(--primary)] hover:underline"
           onClick={(e) => {
             e.preventDefault();
             window.location.href = `/search?q=${tag}`;
@@ -112,7 +112,7 @@ function parseText(content: string): ReactNode[] {
           href={matched}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-orange-500 hover:underline break-all"
+          className="text-[var(--primary)] hover:underline break-all"
         >
           {matched.length > 50 ? matched.slice(0, 50) + '...' : matched}
         </a>

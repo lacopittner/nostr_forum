@@ -83,7 +83,7 @@ export function ProfilePage() {
       {/* Header */}
       <button
         onClick={() => navigate("/")}
-        className="flex items-center gap-2 text-orange-600 hover:text-orange-700 font-bold"
+        className="flex items-center gap-2 text-[var(--primary)] hover:text-[var(--primary-dark)] font-bold"
       >
         <ArrowLeft size={20} />
         Back
@@ -154,7 +154,7 @@ export function ProfilePage() {
           onClick={() => setActiveTab("posts")}
           className={`px-4 py-2 font-bold text-sm transition-colors ${
             activeTab === "posts"
-              ? "text-orange-600 border-b-2 border-orange-600"
+              ? "text-[var(--primary)] border-b-2 border-[var(--primary)]"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
@@ -166,7 +166,7 @@ export function ProfilePage() {
             onClick={() => setActiveTab("saved")}
             className={`flex items-center gap-2 px-4 py-2 font-bold text-sm transition-colors ${
               activeTab === "saved"
-                ? "text-orange-600 border-b-2 border-orange-600"
+                ? "text-[var(--primary)] border-b-2 border-[var(--primary)]"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
@@ -196,7 +196,7 @@ export function ProfilePage() {
             posts.map((post) => (
               <div 
                 key={post.id} 
-                className="bg-card border rounded-xl shadow-sm p-4 hover:border-orange-500/20 transition-all cursor-pointer"
+                className="bg-card border rounded-xl shadow-sm p-4 hover:border-[var(--primary)]/20 transition-all cursor-pointer"
                 onClick={() => navigate(`/post/${post.id}`)}
               >
                 <div className="flex gap-3">
@@ -231,7 +231,7 @@ export function ProfilePage() {
             savedPosts.map((savedPost) => (
               <div 
                 key={savedPost.postId} 
-                className="bg-card border rounded-xl shadow-sm p-4 hover:border-orange-500/20 transition-all cursor-pointer"
+                className="bg-card border rounded-xl shadow-sm p-4 hover:border-[var(--primary)]/20 transition-all cursor-pointer"
                 onClick={() => navigate(`/post/${savedPost.postId}`)}
               >
                 <div className="flex justify-between items-start mb-2">
@@ -255,7 +255,7 @@ export function ProfilePage() {
                 <p className="text-foreground whitespace-pre-wrap line-clamp-3">{savedPost.postContent}</p>
                 
                 {savedPost.note && (
-                  <p className="text-xs text-orange-500 mt-2">Note: {savedPost.note}</p>
+                  <p className="text-xs text-[var(--primary)] mt-2">Note: {savedPost.note}</p>
                 )}
               </div>
             ))

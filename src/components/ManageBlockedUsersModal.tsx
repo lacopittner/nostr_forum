@@ -159,7 +159,7 @@ export function ManageBlockedUsersModal({ community, exit }: ManageBlockedUsersM
           <p className="text-gray-400 mb-4">Only moderators can manage blocked users.</p>
           <button
             onClick={exit}
-            className="w-full px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-all"
+            className="w-full px-4 py-2 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-dark)] transition-all"
           >
             Close
           </button>
@@ -173,7 +173,7 @@ export function ManageBlockedUsersModal({ community, exit }: ManageBlockedUsersM
       <div className="bg-card border rounded-xl max-w-lg w-full p-6 shadow-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
-            <Shield size={24} className="text-orange-500" />
+            <Shield size={24} className="text-[var(--primary)]" />
             <h2 className="text-2xl font-black">Manage Blocked Users</h2>
           </div>
           <button
@@ -203,14 +203,14 @@ export function ManageBlockedUsersModal({ community, exit }: ManageBlockedUsersM
               value={newBlockedUser}
               onChange={(e) => setNewBlockedUser(e.target.value)}
               placeholder="npub1... or pubkey"
-              className="w-full bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-orange-500 outline-none text-sm"
+              className="w-full bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-[var(--primary)] outline-none text-sm"
             />
             <input
               type="text"
               value={blockReason}
               onChange={(e) => setBlockReason(e.target.value)}
               placeholder="Reason for blocking (optional)"
-              className="w-full bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-orange-500 outline-none text-sm"
+              className="w-full bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-[var(--primary)] outline-none text-sm"
             />
             <button
               onClick={handleBlockUser}

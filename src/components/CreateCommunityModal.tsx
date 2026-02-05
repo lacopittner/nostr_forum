@@ -175,7 +175,7 @@ export function CreateCommunityModal({ exit }: CreateCommunityModalProps) {
                 type="text"
                 {...register("name")}
                 placeholder="e.g., Photography Tips"
-                className={`w-full bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-orange-500 outline-none ${
+                className={`w-full bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-[var(--primary)] outline-none ${
                   errors.name ? "border-red-500" : ""
                 }`}
                 maxLength={100}
@@ -194,7 +194,7 @@ export function CreateCommunityModal({ exit }: CreateCommunityModalProps) {
               <textarea
                 {...register("description")}
                 placeholder="What is this community about?"
-                className={`w-full bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-orange-500 outline-none min-h-[80px] resize-none ${
+                className={`w-full bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-[var(--primary)] outline-none min-h-[80px] resize-none ${
                   errors.description ? "border-red-500" : ""
                 }`}
                 maxLength={500}
@@ -214,7 +214,7 @@ export function CreateCommunityModal({ exit }: CreateCommunityModalProps) {
                 type="url"
                 {...register("image")}
                 placeholder="https://example.com/image.jpg"
-                className={`w-full bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-orange-500 outline-none ${
+                className={`w-full bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-[var(--primary)] outline-none ${
                   errors.image ? "border-red-500" : ""
                 }`}
               />
@@ -239,7 +239,7 @@ export function CreateCommunityModal({ exit }: CreateCommunityModalProps) {
               <textarea
                 {...register("rules")}
                 placeholder="1. Be respectful&#10;2. No spam&#10;3. Stay on topic"
-                className={`w-full bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-orange-500 outline-none min-h-[80px] resize-none ${
+                className={`w-full bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-[var(--primary)] outline-none min-h-[80px] resize-none ${
                   errors.rules ? "border-red-500" : ""
                 }`}
                 maxLength={500}
@@ -263,7 +263,7 @@ export function CreateCommunityModal({ exit }: CreateCommunityModalProps) {
                   value={newModerator}
                   onChange={(e) => setNewModerator(e.target.value)}
                   placeholder="npub1... or pubkey"
-                  className="flex-1 bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-orange-500 outline-none text-sm"
+                  className="flex-1 bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-[var(--primary)] outline-none text-sm"
                 />
                 <button
                   type="button"
@@ -307,7 +307,7 @@ export function CreateCommunityModal({ exit }: CreateCommunityModalProps) {
                   value={newFlair}
                   onChange={(e) => setNewFlair(e.target.value)}
                   placeholder="e.g., Discussion, Meme, News"
-                  className="flex-1 bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-orange-500 outline-none text-sm"
+                  className="flex-1 bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-[var(--primary)] outline-none text-sm"
                   maxLength={30}
                 />
                 <button
@@ -324,12 +324,12 @@ export function CreateCommunityModal({ exit }: CreateCommunityModalProps) {
               {flairs.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {flairs.map((flair, index) => (
-                    <div key={index} className="flex items-center gap-1 bg-orange-600/10 border border-orange-600/20 rounded-full px-3 py-1">
-                      <span className="text-sm text-orange-600">{flair}</span>
+                    <div key={index} className="flex items-center gap-1 bg-[var(--primary)]/10 border border-[var(--primary)]/20 rounded-full px-3 py-1">
+                      <span className="text-sm text-[var(--primary)]">{flair}</span>
                       <button
                         type="button"
                         onClick={() => handleRemoveFlair(index)}
-                        className="p-0.5 text-orange-600/60 hover:text-orange-600 transition-colors"
+                        className="p-0.5 text-[var(--primary)]/60 hover:text-[var(--primary)] transition-colors"
                       >
                         <Trash2 size={12} />
                       </button>
@@ -353,7 +353,7 @@ export function CreateCommunityModal({ exit }: CreateCommunityModalProps) {
             <button
               type="submit"
               disabled={isPublishing}
-              className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-all disabled:opacity-50 font-bold"
+              className="flex-1 px-4 py-2 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-dark)] transition-all disabled:opacity-50 font-bold"
             >
               {isPublishing ? "Creating..." : "Create Community"}
             </button>

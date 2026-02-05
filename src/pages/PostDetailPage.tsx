@@ -343,7 +343,7 @@ export function PostDetailPage() {
         <p className="text-gray-400 mb-4">Post not found</p>
         <button
           onClick={() => navigate(-1)}
-          className="px-6 py-2 bg-orange-600 text-white rounded-full font-bold hover:bg-orange-700"
+          className="px-6 py-2 bg-[var(--primary)] text-white rounded-full font-bold hover:bg-[var(--primary-dark)]"
         >
           Go Back
         </button>
@@ -358,7 +358,7 @@ export function PostDetailPage() {
       {/* Back Button */}
       <button
         onClick={() => navigate(-1)}
-        className="flex items-center space-x-2 text-orange-500 hover:text-orange-600 transition-colors"
+        className="flex items-center space-x-2 text-[var(--primary)] hover:text-[var(--primary)] transition-colors"
       >
         <ArrowLeft size={20} />
         <span>Back</span>
@@ -372,11 +372,11 @@ export function PostDetailPage() {
             <button
               onClick={() => handleVote(post.id, post.pubkey, "UPVOTE")}
               disabled={votingIds.has(post.id)}
-              className={`transition-colors ${userVotes[post.id] === "UPVOTE" ? "text-orange-600" : "text-muted-foreground hover:text-orange-600"}`}
+              className={`transition-colors ${userVotes[post.id] === "UPVOTE" ? "text-[var(--primary)]" : "text-muted-foreground hover:text-[var(--primary)]"}`}
             >
               <ArrowBigUp size={24} fill={userVotes[post.id] === "UPVOTE" ? "currentColor" : "none"} />
             </button>
-            <span className={`text-[13px] font-black ${userVotes[post.id] === "UPVOTE" ? "text-orange-600" : userVotes[post.id] === "DOWNVOTE" ? "text-blue-600" : ""}`}>
+            <span className={`text-[13px] font-black ${userVotes[post.id] === "UPVOTE" ? "text-[var(--primary)]" : userVotes[post.id] === "DOWNVOTE" ? "text-blue-600" : ""}`}>
               {reactions[post.id] || 0}
             </span>
             <button
@@ -414,13 +414,13 @@ export function PostDetailPage() {
             value={replyContent}
             onChange={(e) => setReplyContent(e.target.value)}
             placeholder="What are your thoughts?"
-            className="w-full bg-accent/50 border-none rounded-lg p-3 text-sm focus:ring-1 focus:ring-orange-500 min-h-[100px] resize-none"
+            className="w-full bg-accent/50 border-none rounded-lg p-3 text-sm focus:ring-1 focus:ring-[var(--primary)] min-h-[100px] resize-none"
           />
           <div className="mt-3 flex justify-end">
             <button
               onClick={() => handleReply()}  // Call without args for root reply
               disabled={isPublishing || !replyContent.trim()}
-              className="flex items-center space-x-2 px-6 py-2 bg-orange-600 text-white rounded-full font-bold text-sm hover:bg-orange-700 disabled:opacity-50 transition-all"
+              className="flex items-center space-x-2 px-6 py-2 bg-[var(--primary)] text-white rounded-full font-bold text-sm hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all"
             >
               {isPublishing ? (
                 <>
@@ -459,7 +459,7 @@ export function PostDetailPage() {
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as "new" | "top")}
-              className="bg-accent/50 border-none rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-orange-500"
+              className="bg-accent/50 border-none rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-[var(--primary)]"
             >
               <option value="new">New</option>
               <option value="top">Top</option>

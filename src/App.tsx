@@ -307,7 +307,7 @@ function Feed() {
             value={newPostContent}
             onChange={(e) => setNewPostContent(e.target.value)}
             placeholder="What's on your mind? (Posts will be Kind 1 notes)"
-            className="w-full bg-accent/50 border-none rounded-lg p-3 text-sm focus:ring-1 focus:ring-orange-500 min-h-[100px] resize-none overflow-hidden"
+            className="w-full bg-accent/50 border-none rounded-lg p-3 text-sm focus:ring-1 focus:ring-[var(--primary)] min-h-[100px] resize-none overflow-hidden"
           />
 
           {showImageUpload && (
@@ -333,7 +333,7 @@ function Feed() {
             <button
               onClick={handleCreatePost}
               disabled={isPublishing || !newPostContent.trim()}
-              className="flex items-center space-x-2 px-6 py-2 bg-orange-600 text-white rounded-full font-bold text-sm hover:bg-orange-700 disabled:opacity-50 transition-all"
+              className="flex items-center space-x-2 px-6 py-2 bg-[var(--primary)] text-white rounded-full font-bold text-sm hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all"
             >
               <Send size={16} />
               <span>{isPublishing ? "Posting..." : "Post to Nostr"}</span>
@@ -351,7 +351,7 @@ function Feed() {
         >
           <Loader2
             size={24}
-            className={`text-orange-600 transition-all ${isRefreshing ? "animate-spin" : ""}`}
+            className={`text-[var(--primary)] transition-all ${isRefreshing ? "animate-spin" : ""}`}
             style={{ opacity: Math.min(pullDistance / 60, 1) }}
           />
           <span className="text-xs text-muted-foreground mt-1">
@@ -368,10 +368,10 @@ function Feed() {
         )}
         
         {posts.length === 0 && !isLoadingMore && (
-          <div className="relative overflow-hidden bg-gradient-to-br from-orange-600 to-orange-400 rounded-2xl p-6 sm:p-8 text-white shadow-lg shadow-orange-600/20">
+          <div className="relative overflow-hidden bg-gradient-to-br from-[var(--primary)] to-[var(--primary-light)] rounded-2xl p-6 sm:p-8 text-white shadow-lg">
             <div className="relative z-10">
               <h1 className="text-3xl sm:text-4xl font-black tracking-tighter mb-2">The Relay is Quiet...</h1>
-              <p className="text-orange-50 text-sm sm:text-base max-w-xl opacity-90 leading-relaxed">
+              <p className="text-white/80 text-sm sm:text-base max-w-xl leading-relaxed">
                 Successfully connected to ws://localhost:4433. Be the first to start the conversation on your local relay!
               </p>
             </div>
@@ -397,7 +397,7 @@ function Feed() {
                       }}
                       className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${
                         feedFilter === "all"
-                          ? "bg-orange-600 text-white"
+                          ? "bg-[var(--primary)] text-white"
                           : "bg-accent/50 text-gray-400 hover:bg-accent"
                       }`}
                     >
@@ -413,7 +413,7 @@ function Feed() {
                       }}
                       className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${
                         feedFilter === "following"
-                          ? "bg-orange-600 text-white"
+                          ? "bg-[var(--primary)] text-white"
                           : "bg-accent/50 text-gray-400 hover:bg-accent"
                       }`}
                     >
@@ -434,7 +434,7 @@ function Feed() {
                     onClick={() => setSortBy(sort)}
                     className={`px-4 py-1.5 rounded-full text-sm font-bold capitalize transition-all ${
                       sortBy === sort
-                        ? "bg-orange-600 text-white"
+                        ? "bg-[var(--primary)] text-white"
                         : "bg-accent/50 text-gray-400 hover:bg-accent"
                     }`}
                   >
@@ -453,18 +453,18 @@ function Feed() {
         >
           <div className="flex flex-col space-y-4">
             {posts.map((post) => (
-              <div key={post.id} className="bg-card border rounded-xl shadow-sm hover:border-orange-500/20 transition-all group">
+              <div key={post.id} className="bg-card border rounded-xl shadow-sm hover:border-[var(--primary)]/20 transition-all group">
                 <div className="flex">
                   <div className="w-12 bg-accent/30 flex flex-col items-center py-4 space-y-1 rounded-l-xl">
                     <button 
                       onClick={() => handleVote(post, "UPVOTE")}
                       disabled={votingIds.has(post.id)}
-                      className={`transition-colors ${userVotes[post.id] === "UPVOTE" ? "text-orange-600" : "text-muted-foreground hover:text-orange-600"} ${votingIds.has(post.id) ? "opacity-50 cursor-not-allowed" : ""}`}
+                      className={`transition-colors ${userVotes[post.id] === "UPVOTE" ? "text-[var(--primary)]" : "text-muted-foreground hover:text-[var(--primary)]"} ${votingIds.has(post.id) ? "opacity-50 cursor-not-allowed" : ""}`}
                     >
                       <ArrowBigUp size={24} fill={userVotes[post.id] === "UPVOTE" ? "currentColor" : "none"} />
                     </button>
                     <span className={`text-[13px] font-black ${
-                      userVotes[post.id] === "UPVOTE" ? "text-orange-600" : 
+                      userVotes[post.id] === "UPVOTE" ? "text-[var(--primary)]" : 
                       userVotes[post.id] === "DOWNVOTE" ? "text-blue-600" : ""
                     }`}>
                       {reactions[post.id] || 0}
@@ -480,7 +480,7 @@ function Feed() {
                   <div className="p-4 flex-1 cursor-pointer" onClick={() => navigate(`/post/${post.id}`)}>
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground mb-2">
                       <div className="flex items-center space-x-1">
-                        <div className="w-4 h-4 bg-orange-600 rounded-full overflow-hidden">
+                        <div className="w-4 h-4 bg-[var(--primary)] rounded-full overflow-hidden">
                           {profiles[post.pubkey]?.image && (
                             <img src={profiles[post.pubkey].image} className="w-full h-full object-cover" />
                           )}
@@ -564,7 +564,7 @@ function Feed() {
                           value={replyContent}
                           onChange={(e) => setReplyContent(e.target.value)}
                           placeholder="Write your reply..."
-                          className="w-full bg-background border rounded-lg p-2 text-sm focus:ring-1 focus:ring-orange-500 min-h-[80px] inherit"
+                          className="w-full bg-background border rounded-lg p-2 text-sm focus:ring-1 focus:ring-[var(--primary)] min-h-[80px] inherit"
                         />
                         <div className="flex justify-end space-x-2">
                           <button 
@@ -576,7 +576,7 @@ function Feed() {
                           <button 
                             onClick={() => handleReply(post)}
                             disabled={!replyContent.trim() || isPublishing}
-                            className="flex items-center gap-2 px-4 py-1.5 bg-orange-600 text-white rounded-full text-xs font-bold hover:bg-orange-700 disabled:opacity-50"
+                            className="flex items-center gap-2 px-4 py-1.5 bg-[var(--primary)] text-white rounded-full text-xs font-bold hover:bg-[var(--primary-dark)] disabled:opacity-50"
                           >
                             {isPublishing ? (
                               <>

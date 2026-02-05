@@ -166,7 +166,7 @@ export function RelayManagementPage() {
       {/* Header */}
       <button
         onClick={() => navigate("/")}
-        className="flex items-center gap-2 text-orange-600 hover:text-orange-700 font-bold"
+        className="flex items-center gap-2 text-[var(--primary)] hover:text-[var(--primary-dark)] font-bold"
       >
         <ArrowLeft size={20} />
         Back
@@ -198,13 +198,13 @@ export function RelayManagementPage() {
             value={newRelayUrl}
             onChange={(e) => setNewRelayUrl(e.target.value)}
             placeholder="wss://relay.example.com"
-            className="flex-1 bg-accent/50 border-none rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-orange-500"
+            className="flex-1 bg-accent/50 border-none rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-[var(--primary)]"
             onKeyDown={(e) => e.key === "Enter" && handleAddRelay()}
           />
           <button
             onClick={handleAddRelay}
             disabled={!newRelayUrl.trim()}
-            className="px-4 py-2 bg-orange-600 text-white rounded-lg font-bold text-sm hover:bg-orange-700 disabled:opacity-50 transition-all flex items-center gap-2"
+            className="px-4 py-2 bg-[var(--primary)] text-white rounded-lg font-bold text-sm hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all flex items-center gap-2"
           >
             <Plus size={16} />
             Add
@@ -221,7 +221,7 @@ export function RelayManagementPage() {
           <h2 className="font-bold">Your Relays ({relays.length})</h2>
           <button
             onClick={checkAllRelays}
-            className="text-sm text-orange-600 hover:text-orange-700 font-medium"
+            className="text-sm text-[var(--primary)] hover:text-[var(--primary-dark)] font-medium"
           >
             Check All
           </button>
@@ -238,7 +238,7 @@ export function RelayManagementPage() {
             {relays.map((relay) => (
               <div
                 key={relay.url}
-                className="bg-card border rounded-xl p-4 shadow-sm flex items-center justify-between hover:border-orange-500/20 transition-all"
+                className="bg-card border rounded-xl p-4 shadow-sm flex items-center justify-between hover:border-[var(--primary)]/20 transition-all"
               >
                 <div className="flex items-center gap-3 flex-1 min-w-0">
                   {relay.checked ? (
@@ -248,14 +248,14 @@ export function RelayManagementPage() {
                       <AlertCircle size={18} className="text-red-600 flex-shrink-0" />
                     )
                   ) : (
-                    <div className="w-[18px] h-[18px] rounded-full border-2 border-orange-600/30 border-t-orange-600 animate-spin flex-shrink-0" />
+                    <div className="w-[18px] h-[18px] rounded-full border-2 border-[var(--primary)]/30 border-t-[var(--primary)] animate-spin flex-shrink-0" />
                   )}
                   <div className="min-w-0">
                     <a
                       href={relay.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-foreground font-mono text-sm hover:text-orange-600 truncate block"
+                      className="text-foreground font-mono text-sm hover:text-[var(--primary)] truncate block"
                     >
                       {relay.url}
                     </a>
@@ -270,7 +270,7 @@ export function RelayManagementPage() {
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <button
                     onClick={() => checkRelayStatus(relay.url)}
-                    className="p-2 text-muted-foreground hover:text-orange-600 hover:bg-orange-600/10 rounded-lg transition-all"
+                    className="p-2 text-muted-foreground hover:text-[var(--primary)] hover:bg-[var(--primary)]/10 rounded-lg transition-all"
                     title="Check connection"
                   >
                     <RefreshCw size={16} />
@@ -299,7 +299,7 @@ export function RelayManagementPage() {
         
         <button
           onClick={addDefaultRelays}
-          className="px-4 py-2 bg-orange-600 text-white rounded-lg font-bold text-sm hover:bg-orange-700 transition-all"
+          className="px-4 py-2 bg-[var(--primary)] text-white rounded-lg font-bold text-sm hover:bg-[var(--primary-dark)] transition-all"
         >
           Add Default Relays
         </button>

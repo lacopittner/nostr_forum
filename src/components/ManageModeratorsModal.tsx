@@ -114,7 +114,7 @@ export function ManageModeratorsModal({ community, exit, onUpdate }: ManageModer
           <p className="text-gray-400 mb-4">Only the community owner can manage moderators.</p>
           <button
             onClick={exit}
-            className="w-full px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-all"
+            className="w-full px-4 py-2 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-dark)] transition-all"
           >
             Close
           </button>
@@ -160,7 +160,7 @@ export function ManageModeratorsModal({ community, exit, onUpdate }: ManageModer
               value={newModerator}
               onChange={(e) => setNewModerator(e.target.value)}
               placeholder="npub1... or pubkey"
-              className="flex-1 bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-orange-500 outline-none text-sm"
+              className="flex-1 bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-[var(--primary)] outline-none text-sm"
             />
             <button
               onClick={handleAddModerator}
@@ -186,7 +186,7 @@ export function ManageModeratorsModal({ community, exit, onUpdate }: ManageModer
                     {mod.slice(0, 30)}...{mod.slice(-8)}
                   </span>
                   {mod === community.pubkey && (
-                    <span className="text-[10px] text-orange-500 font-bold">OWNER</span>
+                    <span className="text-[10px] text-[var(--primary)] font-bold">OWNER</span>
                   )}
                 </div>
                 <button
@@ -214,7 +214,7 @@ export function ManageModeratorsModal({ community, exit, onUpdate }: ManageModer
           <button
             onClick={handleSave}
             disabled={isPublishing}
-            className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-all disabled:opacity-50 font-bold"
+            className="flex-1 px-4 py-2 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-dark)] transition-all disabled:opacity-50 font-bold"
           >
             {isPublishing ? "Saving..." : "Save Changes"}
           </button>

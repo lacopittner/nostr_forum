@@ -1,6 +1,6 @@
 :root {
   /* Nostr Forum Config */
-  --nf-primary: 249 115 22; /* orange-500 */
+  --nf-primary: 249 115 22; /* [var(--primary)] */
   --nf-primary-hover: 234 88 12; /* orange-600 */
 }
 

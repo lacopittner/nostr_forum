@@ -36,7 +36,7 @@ export function PostContent({ content, maxLines = 8 }: PostContentProps) {
       {shouldTruncate && (
         <button
           onClick={() => setExpanded(!expanded)}
-          className="text-xs font-bold text-orange-500 hover:text-orange-600 transition-colors"
+          className="text-xs font-bold text-[var(--primary)] hover:text-[var(--primary)] transition-colors"
         >
           {expanded ? "Show less" : `Read more (${lines.length - maxLines} more lines)`}
         </button>

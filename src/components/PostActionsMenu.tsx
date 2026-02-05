@@ -55,7 +55,7 @@ export function PostActionsMenu({ post, onEdit, onDelete, isComment = false }: P
         <textarea
           value={editContent}
           onChange={(e) => setEditContent(e.target.value)}
-          className="w-full bg-background border rounded-lg p-2 text-sm focus:ring-1 focus:ring-orange-500 min-h-[80px] resize-none"
+          className="w-full bg-background border rounded-lg p-2 text-sm focus:ring-1 focus:ring-[var(--primary)] min-h-[80px] resize-none"
           autoFocus
         />
         <div className="flex justify-end gap-2">
@@ -73,7 +73,7 @@ export function PostActionsMenu({ post, onEdit, onDelete, isComment = false }: P
           <button
             onClick={handleEdit}
             disabled={isProcessing || !editContent.trim()}
-            className="px-3 py-1.5 bg-orange-600 text-white rounded-full text-xs font-bold hover:bg-orange-700 disabled:opacity-50"
+            className="px-3 py-1.5 bg-[var(--primary)] text-white rounded-full text-xs font-bold hover:bg-[var(--primary-dark)] disabled:opacity-50"
           >
             <Check size={14} className="inline mr-1" />
             Save

@@ -263,10 +263,10 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                       }}
                       className="flex items-center space-x-3 p-2 rounded-lg cursor-pointer hover:bg-accent transition-all group"
                     >
-                      <div className="w-6 h-6 bg-orange-600/20 rounded-full flex items-center justify-center shrink-0">
-                        <span className="text-xs font-bold text-orange-600">{community.name[0].toUpperCase()}</span>
+                      <div className="w-6 h-6 bg-[var(--primary)]/20 rounded-full flex items-center justify-center shrink-0">
+                        <span className="text-xs font-bold text-[var(--primary)]">{community.name[0].toUpperCase()}</span>
                       </div>
-                      <span className="text-sm font-medium truncate group-hover:text-orange-500 transition-colors">
+                      <span className="text-sm font-medium truncate group-hover:text-[var(--primary)] transition-colors">
                         r/{community.name}
                       </span>
                     </div>
@@ -312,7 +312,7 @@ const SidebarItem: React.FC<{ icon: React.ReactNode; label: string; onClick: () 
 
 const TrendingCommunities: React.FC = () => (
   <div className="bg-card border rounded-xl overflow-hidden shadow-sm">
-    <div className="h-12 bg-orange-600 flex items-center px-4">
+    <div className="h-12 bg-[var(--primary)] flex items-center px-4">
       <h3 className="font-black text-white text-xs uppercase tracking-widest leading-none">Trending Communities</h3>
     </div>
     <div className="p-4 space-y-4">
@@ -323,7 +323,7 @@ const TrendingCommunities: React.FC = () => (
               {i}
             </div>
             <div className="flex flex-col min-w-0">
-              <span className="text-sm font-bold group-hover:text-orange-500 transition-colors truncate">r/community_{i}</span>
+              <span className="text-sm font-bold group-hover:text-[var(--primary)] transition-colors truncate">r/community_{i}</span>
               <span className="text-[11px] text-muted-foreground">12.{i}k members</span>
             </div>
           </div>
@@ -344,11 +344,11 @@ const NostrGuide: React.FC = () => (
       </p>
       <ul className="space-y-2">
         <li className="flex items-start space-x-2 text-[11px] text-muted-foreground">
-          <div className="w-1 h-1 bg-orange-500 rounded-full mt-1.5 shrink-0" />
+          <div className="w-1 h-1 bg-[var(--primary)] rounded-full mt-1.5 shrink-0" />
           <span>Posts are Kind 1 notes</span>
         </li>
         <li className="flex items-start space-x-2 text-[11px] text-muted-foreground">
-          <div className="w-1 h-1 bg-orange-500 rounded-full mt-1.5 shrink-0" />
+          <div className="w-1 h-1 bg-[var(--primary)] rounded-full mt-1.5 shrink-0" />
           <span>Communities use NIP-72</span>
         </li>
       </ul>

@@ -136,16 +136,16 @@ export function CommunitiesPage() {
             <div className="flex gap-2">
               <button
                 onClick={createTestingCommunity}
-                className="flex items-center space-x-2 px-4 py-2 bg-accent text-foreground border border-orange-600/30 rounded-full font-bold text-sm hover:bg-accent/70 transition-all"
+                className="flex items-center space-x-2 px-4 py-2 bg-accent text-foreground border border-[var(--primary)]/30 rounded-full font-bold text-sm hover:bg-accent/70 transition-all"
                 title="Quick create testing community"
               >
-                <Beaker size={16} className="text-orange-600" />
+                <Beaker size={16} className="text-[var(--primary)]" />
                 <span className="hidden sm:inline">Create Test Community</span>
                 <span className="sm:hidden">Test</span>
               </button>
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="flex items-center space-x-2 px-6 py-2 bg-orange-600 text-white rounded-full font-bold text-sm hover:bg-orange-700 transition-all"
+                className="flex items-center space-x-2 px-6 py-2 bg-[var(--primary)] text-white rounded-full font-bold text-sm hover:bg-[var(--primary-dark)] transition-all"
               >
                 <Plus size={16} />
                 <span>New Community</span>
@@ -162,7 +162,7 @@ export function CommunitiesPage() {
             placeholder="Search communities..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-accent/50 border rounded-lg focus:ring-1 focus:ring-orange-500"
+            className="w-full pl-10 pr-4 py-2 bg-accent/50 border rounded-lg focus:ring-1 focus:ring-[var(--primary)]"
           />
         </div>
       </div>
@@ -183,7 +183,7 @@ export function CommunitiesPage() {
           {!searchQuery && user && (
             <button
               onClick={() => setShowCreateModal(true)}
-              className="px-6 py-2 bg-orange-600 text-white rounded-full font-bold hover:bg-orange-700 transition-all"
+              className="px-6 py-2 bg-[var(--primary)] text-white rounded-full font-bold hover:bg-[var(--primary-dark)] transition-all"
             >
               Create First Community
             </button>
@@ -215,7 +215,7 @@ export function CommunitiesPage() {
               <div
                 key={`${community.pubkey}-${d}`}
                 onClick={() => handleCommunityClick(community)}
-                className="bg-card border rounded-xl p-6 shadow-sm hover:border-orange-500/20 hover:shadow-md transition-all cursor-pointer group"
+                className="bg-card border rounded-xl p-6 shadow-sm hover:border-[var(--primary)]/20 hover:shadow-md transition-all cursor-pointer group"
               >
                 {/* Community Image */}
                 {image && (
@@ -229,7 +229,7 @@ export function CommunitiesPage() {
                 {/* Community Info */}
                 <div>
                   <div className="flex items-start justify-between mb-2">
-                    <h3 className="font-bold text-lg group-hover:text-orange-500 transition-colors line-clamp-2">
+                    <h3 className="font-bold text-lg group-hover:text-[var(--primary)] transition-colors line-clamp-2">
                       {name}
                     </h3>
                     
@@ -240,7 +240,7 @@ export function CommunitiesPage() {
                         className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold transition-all ${
                           isJoined
                             ? "bg-accent text-foreground hover:bg-accent/70"
-                            : "bg-orange-600 text-white hover:bg-orange-700"
+                            : "bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)]"
                         } ${isJoining ? "opacity-50" : ""}`}
                       >
                         {isJoining ? (

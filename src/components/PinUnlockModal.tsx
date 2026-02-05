@@ -24,7 +24,7 @@ export function PinUnlockModal({ isOpen, onClose, onUnlock, error }: PinUnlockMo
       <div className="bg-card border rounded-xl max-w-sm w-full p-6 shadow-lg">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-orange-600 rounded-lg flex items-center justify-center">
+            <div className="w-10 h-10 bg-[var(--primary)] rounded-lg flex items-center justify-center">
               <Lock size={20} className="text-white" />
             </div>
             <div>
@@ -53,14 +53,14 @@ export function PinUnlockModal({ isOpen, onClose, onUnlock, error }: PinUnlockMo
           placeholder="Enter PIN"
           maxLength={6}
           autoFocus
-          className="w-full bg-accent/50 border-none rounded-lg px-3 py-4 text-sm focus:ring-2 focus:ring-orange-500 text-center text-2xl tracking-widest mb-4"
+          className="w-full bg-accent/50 border-none rounded-lg px-3 py-4 text-sm focus:ring-2 focus:ring-[var(--primary)] text-center text-2xl tracking-widest mb-4"
           onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
         />
         
         <button
           onClick={handleSubmit}
           disabled={pin.length < 4}
-          className="w-full py-3 bg-orange-600 text-white rounded-lg font-bold hover:bg-orange-700 disabled:opacity-50 transition-all"
+          className="w-full py-3 bg-[var(--primary)] text-white rounded-lg font-bold hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all"
         >
           Unlock
         </button>
@@ -69,7 +69,7 @@ export function PinUnlockModal({ isOpen, onClose, onUnlock, error }: PinUnlockMo
           Forgot PIN?{" "}
           <button
             onClick={onClose}
-            className="text-orange-600 hover:underline"
+            className="text-[var(--primary)] hover:underline"
           >
             Log in with different key
           </button>

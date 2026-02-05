@@ -94,7 +94,7 @@ export function ExplorePage() {
     <div className="space-y-8">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <div className="w-12 h-12 bg-orange-600 rounded-xl flex items-center justify-center">
+        <div className="w-12 h-12 bg-[var(--primary)] rounded-xl flex items-center justify-center">
           <Flame size={24} className="text-white" />
         </div>
         <div>
@@ -106,7 +106,7 @@ export function ExplorePage() {
       {/* Trending Hashtags */}
       <div className="bg-card border rounded-xl p-6 shadow-sm">
         <div className="flex items-center gap-2 mb-4">
-          <TrendingUp size={20} className="text-orange-600" />
+          <TrendingUp size={20} className="text-[var(--primary)]" />
           <h2 className="text-lg font-bold">Trending Topics</h2>
         </div>
 
@@ -124,7 +124,7 @@ export function ExplorePage() {
                 onClick={() => navigate(`/search?q=%23${tag}`)}
                 className="flex items-center gap-2 px-4 py-2 bg-accent/50 hover:bg-accent rounded-full transition-all group"
               >
-                <Hash size={14} className="text-orange-600" />
+                <Hash size={14} className="text-[var(--primary)]" />
                 <span className="font-bold text-sm">{tag}</span>
                 <span className="text-xs text-muted-foreground">{count} posts</span>
               </button>
@@ -137,12 +137,12 @@ export function ExplorePage() {
       <div className="bg-card border rounded-xl p-6 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Users size={20} className="text-orange-600" />
+            <Users size={20} className="text-[var(--primary)]" />
             <h2 className="text-lg font-bold">Popular Communities</h2>
           </div>
           <button
             onClick={() => navigate("/communities")}
-            className="flex items-center gap-1 text-sm text-orange-600 hover:text-orange-700 font-bold"
+            className="flex items-center gap-1 text-sm text-[var(--primary)] hover:text-[var(--primary-dark)] font-bold"
           >
             View all
             <ArrowRight size={16} />
@@ -154,10 +154,10 @@ export function ExplorePage() {
             <button
               key={community.id}
               onClick={() => navigate(`/community/${community.id}`)}
-              className="text-left p-4 bg-accent/30 hover:bg-accent/50 rounded-xl transition-all border border-transparent hover:border-orange-500/20"
+              className="text-left p-4 bg-accent/30 hover:bg-accent/50 rounded-xl transition-all border border-transparent hover:border-[var(--primary)]/20"
             >
               <div className="flex items-center gap-3 mb-2">
-                <div className="w-10 h-10 bg-orange-600 rounded-lg flex items-center justify-center">
+                <div className="w-10 h-10 bg-[var(--primary)] rounded-lg flex items-center justify-center">
                   <span className="text-white font-bold text-lg">r/</span>
                 </div>
                 <div>

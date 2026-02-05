@@ -91,7 +91,7 @@ export function CommunityWikiModal({ community, communityId, isOwner, isModerato
       <div className="bg-card border rounded-xl max-w-3xl w-full p-6 shadow-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
-            <Book size={24} className="text-orange-500" />
+            <Book size={24} className="text-[var(--primary)]" />
             <h2 className="text-2xl font-black">Community Wiki</h2>
           </div>
           <div className="flex items-center gap-2">
@@ -101,7 +101,7 @@ export function CommunityWikiModal({ community, communityId, isOwner, isModerato
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all ${
                   isEditing
                     ? "bg-gray-600 text-white hover:bg-gray-700"
-                    : "bg-orange-600 text-white hover:bg-orange-700"
+                    : "bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)]"
                 }`}
               >
                 {isEditing ? (
@@ -140,7 +140,7 @@ export function CommunityWikiModal({ community, communityId, isOwner, isModerato
               value={wikiContent}
               onChange={(e) => setWikiContent(e.target.value)}
               placeholder="Write your community wiki here... (Markdown supported)"
-              className="w-full bg-accent/50 border rounded-lg p-4 focus:ring-1 focus:ring-orange-500 min-h-[400px] resize-none font-mono text-sm"
+              className="w-full bg-accent/50 border rounded-lg p-4 focus:ring-1 focus:ring-[var(--primary)] min-h-[400px] resize-none font-mono text-sm"
             />
             <div className="flex justify-end gap-3">
               <button
@@ -153,7 +153,7 @@ export function CommunityWikiModal({ community, communityId, isOwner, isModerato
               <button
                 onClick={handleSave}
                 disabled={isSaving}
-                className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-all disabled:opacity-50 font-bold"
+                className="flex items-center gap-2 px-4 py-2 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-dark)] transition-all disabled:opacity-50 font-bold"
               >
                 <Save size={16} />
                 {isSaving ? "Saving..." : "Save Wiki"}
@@ -169,7 +169,7 @@ export function CommunityWikiModal({ community, communityId, isOwner, isModerato
             {canEdit && (
               <button
                 onClick={() => setIsEditing(true)}
-                className="mt-4 px-6 py-2 bg-orange-600 text-white rounded-full font-bold hover:bg-orange-700 transition-all"
+                className="mt-4 px-6 py-2 bg-[var(--primary)] text-white rounded-full font-bold hover:bg-[var(--primary-dark)] transition-all"
               >
                 Create Wiki
               </button>

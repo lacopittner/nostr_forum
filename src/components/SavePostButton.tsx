@@ -38,8 +38,8 @@ export function SavePostButton({ post, size = "sm" }: SavePostButtonProps) {
       disabled={isProcessing}
       className={`flex items-center gap-1.5 transition-all ${
         saved 
-          ? "text-orange-500" 
-          : "text-gray-400 hover:text-orange-500"
+          ? "text-[var(--primary)]" 
+          : "text-gray-400 hover:text-[var(--primary)]"
       } ${isProcessing ? "opacity-50" : ""}`}
       title={saved ? "Remove from saved" : "Save post"}
     >
