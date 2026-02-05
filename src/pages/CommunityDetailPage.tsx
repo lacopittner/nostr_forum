@@ -12,6 +12,7 @@ import { FlairSelector } from "../components/FlairSelector";
 import { PostActionsMenu } from "../components/PostActionsMenu";
 import { CommunityWikiModal } from "../components/CommunityWikiModal";
 import { SavePostButton } from "../components/SavePostButton";
+import { ZapButton } from "../components/ZapButton";
 
 export function CommunityDetailPage() {
   const { ndk, user } = useNostr();
@@ -674,7 +675,14 @@ export function CommunityDetailPage() {
                     onDelete={handleDeletePost}
                   />
                   
-                  <SavePostButton post={post} size="sm" />
+                  <div className="flex items-center gap-2">
+                    <SavePostButton post={post} size="sm" />
+                    <ZapButton 
+                      targetPubkey={post.pubkey} 
+                      eventId={post.id}
+                      size="sm"
+                    />
+                  </div>
                 </div>
                 
                 <p className="text-sm whitespace-pre-wrap">{post.content}</p>

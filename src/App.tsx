@@ -11,6 +11,7 @@ import { CommunitiesPage } from "./pages/CommunitiesPage";
 import { CommunityDetailPage } from "./pages/CommunityDetailPage";
 import { PostDetailPage } from "./pages/PostDetailPage";
 import { SavePostButton } from "./components/SavePostButton";
+import { ZapButton } from "./components/ZapButton";
 
 function Feed() {
   const { ndk, user } = useNostr();
@@ -518,6 +519,18 @@ function Feed() {
                     className="px-3 py-1.5"
                   >
                     <SavePostButton post={post} size="sm" />
+                  </div>
+                  
+                  {/* Zap Button */}
+                  <div 
+                    onClick={(e) => e.stopPropagation()}
+                    className="px-3 py-1.5"
+                  >
+                    <ZapButton 
+                      targetPubkey={post.pubkey} 
+                      eventId={post.id}
+                      size="sm"
+                    />
                   </div>
                   
                   <button 

@@ -4,6 +4,7 @@ import { useNostr } from "../providers/NostrProvider";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
 import { ArrowBigUp, ArrowBigDown, ArrowLeft, UserPlus, UserCheck, Bookmark } from "lucide-react";
 import { useSavedPosts } from "../hooks/useSavedPosts";
+import { ZapButton } from "../components/ZapButton";
 
 export function ProfilePage() {
   const { pubkey: paramPubkey } = useParams<{ pubkey: string }>();
@@ -143,22 +144,30 @@ export function ProfilePage() {
           </div>
 
           {user && profilePubkey !== user.pubkey && (
-            <button
-              onClick={handleFollow}
-              className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-full font-bold text-sm hover:bg-orange-700 transition-all"
-            >
-              {isFollowing ? (
-                <>
-                  <UserCheck size={16} />
-                  Following
-                </>
-              ) : (
-                <>
-                  <UserPlus size={16} />
-                  Follow
-                </>
-              )}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleFollow}
+                className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-full font-bold text-sm hover:bg-orange-700 transition-all"
+              >
+                {isFollowing ? (
+                  <>
+                    <UserCheck size={16} />
+                    Following
+                  </>
+                ) : (
+                  <>
+                    <UserPlus size={16} />
+                    Follow
+                  </>
+                )}
+              </button>
+              
+              <ZapButton 
+                targetPubkey={profilePubkey!} 
+                size="md"
+                showAmount={false}
+              />
+            </div>
           )}
         </div>
       </div>
