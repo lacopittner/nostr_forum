@@ -1,4 +1,5 @@
 import { useState } from "react";
+import DOMPurify from "dompurify";
 import { processContent } from "../lib/content";
 import { X, ExternalLink } from "lucide-react";
 
@@ -11,8 +12,14 @@ export function PostContent({ content, maxLines = 8 }: PostContentProps) {
   const [expanded, setExpanded] = useState(false);
   const [showImageModal, setShowImageModal] = useState<string | null>(null);
   
-  const processed = processContent(content);
-  const lines = content.split('\n');
+  // Sanitize content first to prevent XSS
+  const sanitizedContent = DOMPurify.sanitize(content, {
+    ALLOWED_TAGS: [], // Strip all HTML
+    ALLOWED_ATTR: [],
+  });
+  
+  const processed = processContent(sanitizedContent);
+  const lines = sanitizedContent.split('\n');
   const shouldTruncate = lines.length > maxLines;
 
   return (

@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
 import { useNostr } from "../providers/NostrProvider";
+import { useRateLimit } from "./useRateLimit";
 
 export function useVoting() {
   const { ndk, user } = useNostr();
@@ -8,6 +9,13 @@ export function useVoting() {
   const [userVotes, setUserVotes] = useState<Record<string, "UPVOTE" | "DOWNVOTE" | null>>({});
   const [votingIds, setVotingIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  
+  // Rate limiting for votes
+  const { checkRateLimit: checkVoteRateLimit } = useRateLimit("voting", {
+    maxAttempts: 10,
+    windowMs: 60000, // 10 votes per minute
+    cooldownMs: 30000,
+  });
   
   const reactionMap = useRef<Record<string, Record<string, { id: string; content: string; created_at: number }>>>({});
   const votingLock = useRef(new Set<string>());
@@ -67,6 +75,9 @@ export function useVoting() {
     type: "UPVOTE" | "DOWNVOTE"
   ): Promise<boolean> => {
     if (!user || votingLock.current.has(targetEvent.id)) return false;
+    
+    // Check rate limit
+    if (!checkVoteRateLimit()) return false;
 
     const targetId = targetEvent.id;
     const targetPubkey = targetEvent.pubkey;

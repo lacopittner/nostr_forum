@@ -20,6 +20,7 @@ import { PostContent } from "./components/PostContent";
 import { ToastContainer } from "./components/Toast";
 import { useVoting } from "./hooks/useVoting";
 import { useFollows } from "./hooks/useFollows";
+import { useRateLimit } from "./hooks/useRateLimit";
 import { logger } from "./lib/logger";
 import { useToast } from "./lib/toast";
 
@@ -48,6 +49,13 @@ function Feed() {
 
   // Get following list for filtering
   const { following } = useFollows();
+  
+  // Rate limiting for posts
+  const { checkRateLimit: checkPostRateLimit } = useRateLimit("posting", {
+    maxAttempts: 3,
+    windowMs: 60000, // 3 posts per minute
+    cooldownMs: 30000,
+  });
 
   // Voting - use the custom hook instead of duplicating logic
   const { reactions, userVotes, votingIds, error: votingError, handleReaction, processIncomingReaction, processIncomingDeletion } = useVoting();
@@ -206,6 +214,9 @@ function Feed() {
 
   const handleCreatePost = async () => {
     if (!newPostContent.trim() || !user || isPublishing) return;
+    
+    // Check rate limit
+    if (!checkPostRateLimit()) return;
 
     setIsPublishing(true);
     setPostError(null);
@@ -231,8 +242,18 @@ function Feed() {
     handleReaction(post, type);
   };
 
+  // Rate limiting for replies
+  const { checkRateLimit: checkReplyRateLimit } = useRateLimit("replying", {
+    maxAttempts: 5,
+    windowMs: 60000, // 5 replies per minute
+    cooldownMs: 30000,
+  });
+
   const handleReply = async (post: NDKEvent) => {
     if (!replyContent.trim() || !user || isPublishing) return;
+    
+    // Check rate limit
+    if (!checkReplyRateLimit()) return;
 
     setIsPublishing(true);
     try {
