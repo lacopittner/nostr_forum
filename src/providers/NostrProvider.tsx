@@ -53,8 +53,8 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       attemptReconnect();
     };
 
-    const handleError = (err: Error) => {
-      console.error("Relay error:", err);
+    const handleError = () => {
+      console.error("Relay connection error");
       setConnectionStatus("error");
       attemptReconnect();
     };
@@ -65,14 +65,14 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       relays.forEach((relay: NDKRelay) => {
         relay.on("connect", handleConnect);
         relay.on("disconnect", handleDisconnect);
-        relay.on("error", handleError);
+        relay.on("flapping", handleError);
       });
 
       return () => {
         relays.forEach((relay: NDKRelay) => {
           relay.off("connect", handleConnect);
           relay.off("disconnect", handleDisconnect);
-          relay.off("error", handleError);
+          relay.off("flapping", handleError);
         });
       };
     };
@@ -155,7 +155,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   const toggleTheme = () => {
-    setTheme(prev => prev === "light" ? "dark" : "dark" ? "light" : "light");
+    setTheme(prev => prev === "light" ? "dark" : "light");
   };
 
   return (

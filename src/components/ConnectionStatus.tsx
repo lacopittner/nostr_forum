@@ -1,6 +1,6 @@
 import React from "react";
 import { useNostr } from "../providers/NostrProvider";
-import { Wifi, WifiOff, Loader2, AlertCircle } from "lucide-react";
+import { WifiOff, Loader2, AlertCircle } from "lucide-react";
 
 export const ConnectionStatus: React.FC = () => {
   const { connectionStatus, reconnect } = useNostr();

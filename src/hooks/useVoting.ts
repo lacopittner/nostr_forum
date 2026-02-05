@@ -2,12 +2,6 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
 import { useNostr } from "../providers/NostrProvider";
 
-interface VotingState {
-  reactions: Record<string, number>;
-  userVotes: Record<string, "UPVOTE" | "DOWNVOTE" | null>;
-  pendingVotes: Set<string>;
-}
-
 export function useVoting() {
   const { ndk, user } = useNostr();
   const [reactions, setReactions] = useState<Record<string, number>>({});
@@ -17,7 +11,6 @@ export function useVoting() {
   
   const reactionMap = useRef<Record<string, Record<string, { id: string; content: string; created_at: number }>>>({});
   const votingLock = useRef(new Set<string>());
-  const optimisticQueue = useRef<Array<{ targetId: string; type: "UPVOTE" | "DOWNVOTE" | "UNDO"; resolve: () => void }>>([]);
 
   const updateScores = useCallback(() => {
     const newScores: Record<string, number> = {};
@@ -65,7 +58,7 @@ export function useVoting() {
   }, [userVotes]);
 
   // Revert optimistic update
-  const revertOptimisticUpdate = useCallback((targetId: string, originalVote: "UPVOTE" | "DOWNVOTE" | null) => {
+  const revertOptimisticUpdate = useCallback(() => {
     updateScores(); // Recalculate from reactionMap
   }, [updateScores]);
 
@@ -86,9 +79,6 @@ export function useVoting() {
     const isCurrentlyDown = lastContent === "DOWNVOTE" || lastContent === "-";
     const isUndoing = (type === "UPVOTE" && isCurrentlyUp) || 
                      (type === "DOWNVOTE" && isCurrentlyDown);
-
-    // Store original state for potential rollback
-    const originalVote = userVotes[targetId];
 
     votingLock.current.add(targetId);
     setVotingIds(prev => new Set(prev).add(targetId));
@@ -138,7 +128,7 @@ export function useVoting() {
       console.error("Reaction failed:", err);
       setError("Failed to vote. Please try again.");
       // Revert optimistic update
-      revertOptimisticUpdate(targetId, originalVote);
+      revertOptimisticUpdate();
       return false;
     } finally {
       votingLock.current.delete(targetId);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Home, Search, Users, User, Plus, Menu } from "lucide-react";
+import { Home, Search, Users, User, Plus } from "lucide-react";
 import { useNostr } from "../../providers/NostrProvider";
 import { useNavigate, useLocation } from "react-router-dom";
 

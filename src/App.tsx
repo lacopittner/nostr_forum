@@ -1,6 +1,6 @@
 import { NostrProvider, useNostr } from "./providers/NostrProvider";
 import { AppShell } from "./components/layout/AppShell";
-import { ArrowBigUp, ArrowBigDown, MessageSquare, Share2, MoreHorizontal, Send, AlertCircle, Loader2 } from "lucide-react";
+import { ArrowBigUp, ArrowBigDown, MessageSquare, Share2, MoreHorizontal, Send, AlertCircle } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
 import { BrowserRouter as Router, Routes, Route, useNavigate } from "react-router-dom";
@@ -27,7 +27,7 @@ function Feed() {
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyContent, setReplyContent] = useState("");
   const [profiles, setProfiles] = useState<Record<string, any>>({});
-  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
+  const [commentCounts] = useState<Record<string, number>>({});
   const [sortBy, setSortBy] = useState<"hot" | "new" | "top">("new");
   
   // Infinite scroll state
