@@ -2,10 +2,12 @@ import { useNostr } from "../providers/NostrProvider";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
-import { ArrowLeft, ArrowBigUp, ArrowBigDown, MessageSquare, Send, AlertCircle } from "lucide-react";
+import { ArrowLeft, ArrowBigUp, ArrowBigDown, MessageSquare, Send, AlertCircle, Loader2 } from "lucide-react";
 import { CommentThread } from "../components/CommentThread";
 import { useVoting } from "../hooks/useVoting";
 import { PostContent } from "../components/PostContent";
+import { logger } from "../lib/logger";
+import { useToast } from "../lib/toast";
 
 interface Comment {
   event: NDKEvent;
@@ -16,6 +18,7 @@ export function PostDetailPage() {
   const { ndk, user } = useNostr();
   const { postId } = useParams<{ postId: string }>();
   const navigate = useNavigate();
+  const { success, error: showError } = useToast();
   
   const [post, setPost] = useState<NDKEvent | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -47,7 +50,7 @@ export function PostDetailPage() {
         setProfiles(prev => ({ ...prev, [pubkey]: profile }));
       }
     } catch (e) {
-      console.error("Failed to fetch profile:", pubkey, e);
+      logger.error("Failed to fetch profile:", pubkey, e);
       // Silently fail - user pubkey will be displayed instead
     }
   }, [ndk, profiles]);
@@ -66,7 +69,7 @@ export function PostDetailPage() {
           fetchProfile(fetchedPost.pubkey);
         }
       } catch (error) {
-        console.error("Failed to fetch post", error);
+        logger.error("Failed to fetch post", error); showError("Failed to load post. Please try again.");
       }
     };
 
@@ -227,8 +230,10 @@ export function PostDetailPage() {
       // Add to comments immediately
       const newComment: Comment = { event, replies: [] };
       setComments(prev => [newComment, ...prev]);
+      
+      success("Reply published successfully!");
     } catch (error) {
-      console.error("Failed to publish reply:", error);
+      logger.error("Failed to publish reply:", error); showError("Failed to publish reply. Please try again.");
       setReplyError("Failed to publish reply. Check your relay connection.");
     } finally {
       setIsPublishing(false);
@@ -282,7 +287,7 @@ export function PostDetailPage() {
         return updateReplies(prev);
       });
     } catch (error) {
-      console.error("Failed to publish nested reply:", error);
+      logger.error("Failed to publish nested reply:", error); showError("Failed to publish reply. Please try again.");
       setReplyError("Failed to publish reply. Check your relay connection.");
     } finally {
       setIsPublishing(false);
@@ -313,7 +318,7 @@ export function PostDetailPage() {
       
       setComments(prev => removeComment(prev));
     } catch (error) {
-      console.error("Failed to delete comment", error);
+      logger.error("Failed to delete comment", error); showError("Failed to delete comment. Please try again.");
       alert("Failed to delete comment");
     }
   };
@@ -417,8 +422,17 @@ export function PostDetailPage() {
               disabled={isPublishing || !replyContent.trim()}
               className="flex items-center space-x-2 px-6 py-2 bg-orange-600 text-white rounded-full font-bold text-sm hover:bg-orange-700 disabled:opacity-50 transition-all"
             >
-              <Send size={16} />
-              <span>{isPublishing ? "Posting..." : "Comment"}</span>
+              {isPublishing ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  <span>Posting...</span>
+                </>
+              ) : (
+                <>
+                  <Send size={16} />
+                  <span>Comment</span>
+                </>
+              )}
             </button>
           </div>
         </div>

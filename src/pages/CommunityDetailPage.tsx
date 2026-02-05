@@ -2,7 +2,7 @@ import { useNostr } from "../providers/NostrProvider";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
-import { Edit2, Send, ArrowLeft, Shield, Users, ArrowBigUp, ArrowBigDown, Gavel, UserPlus, UserCheck, Search, Book, AlertCircle } from "lucide-react";
+import { Edit2, Send, ArrowLeft, Shield, Users, ArrowBigUp, ArrowBigDown, Gavel, UserPlus, UserCheck, Search, Book, AlertCircle, Loader2 } from "lucide-react";
 import { EditCommunityModal } from "../components/EditCommunityModal";
 import { ManageModeratorsModal } from "../components/ManageModeratorsModal";
 import { ManageBlockedUsersModal } from "../components/ManageBlockedUsersModal";
@@ -14,11 +14,14 @@ import { PostActionsMenu } from "../components/PostActionsMenu";
 import { CommunityWikiModal } from "../components/CommunityWikiModal";
 import { SavePostButton } from "../components/SavePostButton";
 import { ZapButton } from "../components/ZapButton";
+import { logger } from "../lib/logger";
+import { useToast } from "../lib/toast";
 
 export function CommunityDetailPage() {
   const { ndk, user } = useNostr();
   const { pubkey, communityId } = useParams<{ pubkey: string; communityId: string }>();
   const navigate = useNavigate();
+  const { success, error: showError } = useToast();
   const [community, setCommunity] = useState<NDKEvent | null>(null);
   const [posts, setPosts] = useState<NDKEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -84,7 +87,7 @@ export function CommunityDetailPage() {
         setProfiles(prev => ({ ...prev, [pubkey]: profile }));
       }
     } catch (e) {
-      console.error("Failed to fetch profile:", pubkey, e);
+      logger.error("Failed to fetch profile:", pubkey, e);
       // Silently fail - user pubkey will be displayed instead
     }
   }, [ndk, profiles]);
@@ -114,7 +117,7 @@ export function CommunityDetailPage() {
           setIsLoading(false);
         });
       } catch (error) {
-        console.error("Failed to fetch community", error);
+        logger.error("Failed to fetch community", error); showError("Failed to load community. Please try again.");
         setIsLoading(false);
       }
     };
@@ -218,7 +221,7 @@ export function CommunityDetailPage() {
       }));
       setEditedPosts(prev => new Set(prev).add(postId));
     } catch (error) {
-      console.error("Failed to edit post", error);
+      logger.error("Failed to edit post", error); showError("Failed to edit post. Please try again.");
       alert("Failed to edit post");
     }
   };
@@ -239,7 +242,7 @@ export function CommunityDetailPage() {
       setPosts(prev => prev.filter(p => p.id !== postId));
       setFilteredPosts(prev => prev.filter(p => p.id !== postId));
     } catch (error) {
-      console.error("Failed to delete post", error);
+      logger.error("Failed to delete post", error); showError("Failed to delete post. Please try again.");
       alert("Failed to delete post");
     }
   };
@@ -296,8 +299,9 @@ export function CommunityDetailPage() {
       await event.publish();
       setNewPostContent("");
       setSelectedFlair(null);
+      success("Post published successfully!");
     } catch (error) {
-      console.error("Failed to publish post:", error);
+      logger.error("Failed to publish post:", error); showError("Failed to publish post. Check your relay connection.");
       setPostError("Failed to publish post. Check your relay connection.");
     } finally {
       setIsPublishing(false);
@@ -532,8 +536,17 @@ export function CommunityDetailPage() {
               disabled={isPublishing || !newPostContent.trim()}
               className="flex items-center space-x-2 px-6 py-2 bg-orange-600 text-white rounded-full font-bold text-sm hover:bg-orange-700 disabled:opacity-50 transition-all"
             >
-              <Send size={16} />
-              <span>{isPublishing ? "Posting..." : "Post"}</span>
+              {isPublishing ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  <span>Posting...</span>
+                </>
+              ) : (
+                <>
+                  <Send size={16} />
+                  <span>Post</span>
+                </>
+              )}
             </button>
           </div>
         </div>

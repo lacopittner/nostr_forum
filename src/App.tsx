@@ -1,6 +1,6 @@
 import { NostrProvider, useNostr } from "./providers/NostrProvider";
 import { AppShell } from "./components/layout/AppShell";
-import { ArrowBigUp, ArrowBigDown, MessageSquare, Share2, MoreHorizontal, Send, AlertCircle } from "lucide-react";
+import { ArrowBigUp, ArrowBigDown, MessageSquare, Share2, MoreHorizontal, Send, AlertCircle, Loader2 } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
 import { BrowserRouter as Router, Routes, Route, useNavigate } from "react-router-dom";
@@ -16,11 +16,15 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ConnectionStatus } from "./components/ConnectionStatus";
 import { InfiniteScroll } from "./components/InfiniteScroll";
 import { PostContent } from "./components/PostContent";
+import { ToastContainer } from "./components/Toast";
 import { useVoting } from "./hooks/useVoting";
+import { logger } from "./lib/logger";
+import { useToast } from "./lib/toast";
 
 function Feed() {
   const { ndk, user } = useNostr();
   const navigate = useNavigate();
+  const { success, error: showError } = useToast();
   const [posts, setPosts] = useState<NDKEvent[]>([]);
   const [newPostContent, setNewPostContent] = useState("");
   const [isPublishing, setIsPublishing] = useState(false);
@@ -53,7 +57,7 @@ function Feed() {
         setProfiles(prev => ({ ...prev, [pubkey]: profile }));
       }
     } catch (e) {
-      console.error("Failed to fetch profile:", pubkey, e);
+      logger.error("Failed to fetch profile:", pubkey, e);
     }
   }, [ndk, profiles]);
 
@@ -149,7 +153,8 @@ function Feed() {
         setHasMore(uniqueEvents.length >= POSTS_PER_PAGE);
       }
     } catch (error) {
-      console.error("Failed to fetch posts:", error);
+      logger.error("Failed to fetch posts:", error);
+      showError("Failed to load posts. Please check your connection.");
     } finally {
       setIsLoadingMore(false);
     }
@@ -199,9 +204,11 @@ function Feed() {
       event.tags = [["t", "nostr"], ["a", "34550:global:community"]];
       await event.publish();
       setNewPostContent("");
+      success("Post published successfully!");
     } catch (error) {
-      console.error("Failed to publish post:", error);
+      logger.error("Failed to publish post:", error);
       setPostError("Failed to publish post. Check your relay connection.");
+      showError("Failed to publish post. Check your relay connection.");
     } finally {
       setIsPublishing(false);
     }
@@ -234,7 +241,8 @@ function Feed() {
       setReplyContent("");
       setReplyingTo(null);
     } catch (error) {
-      console.error("Failed to publish reply", error);
+      logger.error("Failed to publish reply", error);
+      showError("Failed to publish reply. Please try again.");
     } finally {
       setIsPublishing(false);
     }
@@ -441,10 +449,17 @@ function Feed() {
                           </button>
                           <button 
                             onClick={() => handleReply(post)}
-                            disabled={!replyContent.trim()}
-                            className="px-4 py-1.5 bg-orange-600 text-white rounded-full text-xs font-bold hover:bg-orange-700 disabled:opacity-50"
+                            disabled={!replyContent.trim() || isPublishing}
+                            className="flex items-center gap-2 px-4 py-1.5 bg-orange-600 text-white rounded-full text-xs font-bold hover:bg-orange-700 disabled:opacity-50"
                           >
-                            Post Reply
+                            {isPublishing ? (
+                              <>
+                                <Loader2 size={14} className="animate-spin" />
+                                Posting...
+                              </>
+                            ) : (
+                              "Post Reply"
+                            )}
                           </button>
                         </div>
                       </div>
@@ -467,6 +482,7 @@ function App() {
         <Router>
           <AppShell>
             <ConnectionStatus />
+            <ToastContainer />
             <Routes>
               <Route path="/" element={<Feed />} />
               <Route path="/post/:postId" element={<PostDetailPage />} />
