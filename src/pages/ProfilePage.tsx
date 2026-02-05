@@ -2,19 +2,22 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useNostr } from "../providers/NostrProvider";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
-import { ArrowBigUp, ArrowBigDown, ArrowLeft, UserPlus, UserCheck, Bookmark } from "lucide-react";
+import { ArrowBigUp, ArrowBigDown, ArrowLeft, Bookmark } from "lucide-react";
 import { useSavedPosts } from "../hooks/useSavedPosts";
+import { useFollows } from "../hooks/useFollows";
 import { ZapButton } from "../components/ZapButton";
+import { FollowButton } from "../components/FollowButton";
+import { EmptyState } from "../components/EmptyState";
+import { NDKProfile } from "../lib/types";
 
 export function ProfilePage() {
   const { pubkey: paramPubkey } = useParams<{ pubkey: string }>();
   const navigate = useNavigate();
   const { ndk, user } = useNostr();
   const { savedPosts, unsavePost } = useSavedPosts();
-  const [profile, setProfile] = useState<any>(null);
+  const { followingCount, followersCount } = useFollows();
+  const [profile, setProfile] = useState<NDKProfile | null>(null);
   const [posts, setPosts] = useState<NDKEvent[]>([]);
-  const [following, setFollowing] = useState<string[]>([]);
-  const [isFollowing, setIsFollowing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"posts" | "saved">("posts");
 
@@ -27,6 +30,8 @@ export function ProfilePage() {
     if (!profilePubkey || !ndk) return;
 
     setIsLoading(true);
+    seenEventIds.current.clear();
+    setPosts([]);
     
     // Fetch profile metadata
     ndk.getUser({ pubkey: profilePubkey }).fetchProfile().then((p) => {
@@ -49,49 +54,12 @@ export function ProfilePage() {
       });
     });
 
-    // Fetch contacts (following/followers)
-    ndk.subscribe(
-      { kinds: [3], authors: [profilePubkey] },
-      { closeOnEose: true }
-    ).on("event", (event: NDKEvent) => {
-      const contacts = event.tags.filter((t) => t[0] === "p").map((t) => t[1]);
-      setFollowing(contacts);
-    });
-
-    // If viewing someone else, check if we follow them
-    if (user && profilePubkey !== user.pubkey) {
-      ndk.subscribe(
-        { kinds: [3], authors: [user.pubkey] },
-        { closeOnEose: true }
-      ).on("event", (event: NDKEvent) => {
-        const contacts = event.tags.filter((t) => t[0] === "p").map((t) => t[1]);
-        setIsFollowing(contacts.includes(profilePubkey));
-      });
-    }
-
     setTimeout(() => setIsLoading(false), 500);
 
     return () => {
       postSub.stop();
     };
   }, [profilePubkey, ndk, user]);
-
-  const handleFollow = async () => {
-    if (!user || !profilePubkey) return;
-
-    try {
-      const event = new NDKEvent(ndk);
-      event.kind = 3;
-      event.tags = isFollowing
-        ? following.filter((p) => p !== profilePubkey).map((p) => ["p", p])
-        : [...following.map((p) => ["p", p]), ["p", profilePubkey]];
-
-      await event.publish();
-      setIsFollowing(!isFollowing);
-    } catch (error) {
-      console.error("Failed to follow/unfollow", error);
-    }
-  };
 
   if (isLoading) {
     return (
@@ -139,28 +107,14 @@ export function ProfilePage() {
             )}
             <div className="flex gap-4 mt-4 text-xs text-muted-foreground">
               <span><strong>{posts.length}</strong> posts</span>
-              <span><strong>{following.length}</strong> following</span>
+              <span><strong>{isOwnProfile ? followingCount : '...'}</strong> following</span>
+              <span><strong>{isOwnProfile ? followersCount : '...'}</strong> followers</span>
             </div>
           </div>
 
           {user && profilePubkey !== user.pubkey && (
             <div className="flex items-center gap-2">
-              <button
-                onClick={handleFollow}
-                className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-full font-bold text-sm hover:bg-orange-700 transition-all"
-              >
-                {isFollowing ? (
-                  <>
-                    <UserCheck size={16} />
-                    Following
-                  </>
-                ) : (
-                  <>
-                    <UserPlus size={16} />
-                    Follow
-                  </>
-                )}
-              </button>
+              <FollowButton pubkey={profilePubkey!} size="md" />
               
               <ZapButton 
                 targetPubkey={profilePubkey!} 
@@ -204,9 +158,18 @@ export function ProfilePage() {
       {activeTab === "posts" && (
         <div className="space-y-4">
           {posts.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No posts yet
-            </div>
+            <EmptyState
+              icon={Bookmark}
+              title="No posts yet"
+              description={isOwnProfile 
+                ? "You haven't created any posts yet. Start sharing your thoughts!"
+                : "This user hasn't created any posts yet."
+              }
+              action={isOwnProfile ? {
+                label: "Create Post",
+                onClick: () => navigate("/")
+              } : undefined}
+            />
           ) : (
             posts.map((post) => (
               <div 
