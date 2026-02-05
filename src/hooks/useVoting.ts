@@ -1,11 +1,6 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
 import { useNostr } from "../providers/NostrProvider";
-
-interface VoteState {
-  reactions: Record<string, number>;
-  userVotes: Record<string, "UPVOTE" | "DOWNVOTE" | null>;
-}
 
 export function useVoting() {
   const { ndk, user } = useNostr();
@@ -20,6 +15,7 @@ export function useVoting() {
   const updateScores = useCallback(() => {
     const newScores: Record<string, number> = {};
     const newUserVotes: Record<string, "UPVOTE" | "DOWNVOTE" | null> = {};
+    const currentUserPubkey = user?.pubkey;
 
     for (const [targetId, users] of Object.entries(reactionMap.current)) {
       let score = 0;
@@ -27,7 +23,9 @@ export function useVoting() {
         if (reaction.content === "NEUTRAL") continue;
         const isDown = reaction.content === "DOWNVOTE" || reaction.content === "-";
         score += isDown ? -1 : 1;
-        if (user && pubkey === user.pubkey) {
+        
+        // Check if this reaction is from the current user
+        if (currentUserPubkey && pubkey === currentUserPubkey) {
           newUserVotes[targetId] = isDown ? "DOWNVOTE" : "UPVOTE";
         }
       }
@@ -36,6 +34,12 @@ export function useVoting() {
     setReactions(newScores);
     setUserVotes(newUserVotes);
   }, [user?.pubkey]);
+
+  useEffect(() => {
+    if (user?.pubkey) {
+      updateScores();
+    }
+  }, [user?.pubkey, updateScores]);
 
   const handleReaction = async (
     targetEvent: NDKEvent,
