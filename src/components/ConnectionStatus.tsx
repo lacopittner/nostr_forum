@@ -1,19 +1,17 @@
 import React from "react";
 import { useNostr } from "../providers/NostrProvider";
-import { WifiOff, Loader2, AlertCircle } from "lucide-react";
+import { WifiOff, AlertCircle } from "lucide-react";
 
 export const ConnectionStatus: React.FC = () => {
   const { connectionStatus, reconnect } = useNostr();
 
+  // Only show when there's actually a problem, not during normal connecting
   if (connectionStatus === "connected") return null;
+  
+  // Don't show connecting state to avoid flickering
+  if (connectionStatus === "connecting") return null;
 
   const config = {
-    connecting: {
-      icon: <Loader2 size={16} className="animate-spin" />,
-      text: "Connecting...",
-      className: "bg-yellow-500/10 border-yellow-500/20 text-yellow-600",
-      showRetry: false
-    },
     disconnected: {
       icon: <WifiOff size={16} />,
       text: "Disconnected",
