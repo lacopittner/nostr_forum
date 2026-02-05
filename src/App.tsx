@@ -18,6 +18,7 @@ import { InfiniteScroll } from "./components/InfiniteScroll";
 import { PostContent } from "./components/PostContent";
 import { ToastContainer } from "./components/Toast";
 import { useVoting } from "./hooks/useVoting";
+import { useFollows } from "./hooks/useFollows";
 import { logger } from "./lib/logger";
 import { useToast } from "./lib/toast";
 
@@ -36,12 +37,16 @@ function Feed() {
   const [profiles, setProfiles] = useState<Record<string, NDKProfile>>({});
   const [commentCounts] = useState<Record<string, number>>({});
   const [sortBy, setSortBy] = useState<"hot" | "new" | "top">("new");
+  const [feedFilter, setFeedFilter] = useState<"all" | "following">("all");
   
   // Infinite scroll state
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [until, setUntil] = useState<number | undefined>(undefined);
   const POSTS_PER_PAGE = 20;
+
+  // Get following list for filtering
+  const { following } = useFollows();
 
   // Voting - use the custom hook instead of duplicating logic
   const { reactions, userVotes, votingIds, error: votingError, handleReaction, processIncomingReaction, processIncomingDeletion } = useVoting();
@@ -122,6 +127,11 @@ function Feed() {
         kinds: [NDKKind.Text], 
         limit: POSTS_PER_PAGE 
       };
+      
+      // Filter by following if selected
+      if (feedFilter === "following" && following.size > 0) {
+        filter.authors = Array.from(following);
+      }
       
       if (loadMore && until) {
         filter.until = until - 1;
@@ -300,24 +310,70 @@ function Feed() {
           </div>
         )}
       
-        {/* Sorting Controls */}
+        {/* Sorting and Feed Filter Controls */}
         {posts.length > 0 && (
           <div className="flex items-center justify-between bg-card border rounded-xl p-3 shadow-sm">
-            <span className="text-sm font-bold text-gray-400">Sort by:</span>
+            <div className="flex items-center gap-4">
+              {/* Feed Filter */}
+              {user && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-gray-400">Feed:</span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => {
+                        setFeedFilter("all");
+                        setPosts([]);
+                        seenEventIds.current.clear();
+                        setUntil(undefined);
+                        loadPosts();
+                      }}
+                      className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${
+                        feedFilter === "all"
+                          ? "bg-orange-600 text-white"
+                          : "bg-accent/50 text-gray-400 hover:bg-accent"
+                      }`}
+                    >
+                      All
+                    </button>
+                    <button
+                      onClick={() => {
+                        setFeedFilter("following");
+                        setPosts([]);
+                        seenEventIds.current.clear();
+                        setUntil(undefined);
+                        loadPosts();
+                      }}
+                      className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${
+                        feedFilter === "following"
+                          ? "bg-orange-600 text-white"
+                          : "bg-accent/50 text-gray-400 hover:bg-accent"
+                      }`}
+                    >
+                      Following
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {/* Sort */}
             <div className="flex items-center gap-2">
-              {(["hot", "new", "top"] as const).map((sort) => (
-                <button
-                  key={sort}
-                  onClick={() => setSortBy(sort)}
-                  className={`px-4 py-1.5 rounded-full text-sm font-bold capitalize transition-all ${
-                    sortBy === sort
-                      ? "bg-orange-600 text-white"
-                      : "bg-accent/50 text-gray-400 hover:bg-accent"
-                  }`}
-                >
-                  {sort}
-                </button>
-              ))}
+              <span className="text-sm font-bold text-gray-400">Sort:</span>
+              <div className="flex items-center gap-1">
+                {(["hot", "new", "top"] as const).map((sort) => (
+                  <button
+                    key={sort}
+                    onClick={() => setSortBy(sort)}
+                    className={`px-4 py-1.5 rounded-full text-sm font-bold capitalize transition-all ${
+                      sortBy === sort
+                        ? "bg-orange-600 text-white"
+                        : "bg-accent/50 text-gray-400 hover:bg-accent"
+                    }`}
+                  >
+                    {sort}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}
