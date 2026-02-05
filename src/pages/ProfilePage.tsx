@@ -5,6 +5,7 @@ import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
 import { ArrowBigUp, ArrowBigDown, ArrowLeft, Bookmark } from "lucide-react";
 import { useSavedPosts } from "../hooks/useSavedPosts";
 import { useFollows } from "../hooks/useFollows";
+import { useNip05 } from "../hooks/useNip05";
 import { ZapButton } from "../components/ZapButton";
 import { FollowButton } from "../components/FollowButton";
 import { EmptyState } from "../components/EmptyState";
@@ -16,6 +17,7 @@ export function ProfilePage() {
   const { ndk, user } = useNostr();
   const { savedPosts, unsavePost } = useSavedPosts();
   const { followingCount, followersCount } = useFollows();
+  const { verification, checkProfileNip05 } = useNip05();
   const [profile, setProfile] = useState<NDKProfile | null>(null);
   const [posts, setPosts] = useState<NDKEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -61,6 +63,13 @@ export function ProfilePage() {
     };
   }, [profilePubkey, ndk, user]);
 
+  // Check NIP-05 verification when profile loads
+  useEffect(() => {
+    if (profile?.nip05 && profilePubkey) {
+      checkProfileNip05(profile.nip05, profilePubkey);
+    }
+  }, [profile?.nip05, profilePubkey, checkProfileNip05]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -98,10 +107,23 @@ export function ProfilePage() {
             />
           )}
           <div className="flex-1">
-            <h1 className="text-2xl font-black text-foreground">
-              {profile?.displayName || profile?.name || profilePubkey?.slice(0, 8)}
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-black text-foreground">
+                {profile?.displayName || profile?.name || profilePubkey?.slice(0, 8)}
+              </h1>
+              {verification?.isVerified && (
+                <div className="flex items-center gap-1 px-2 py-0.5 bg-blue-500/10 text-blue-500 rounded-full text-xs font-bold" title={`Verified: ${verification.nip05}`}>
+                  <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
+                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                  </svg>
+                  <span className="hidden sm:inline">{verification.nip05}</span>
+                </div>
+              )}
+            </div>
             <p className="text-sm text-muted-foreground">{profilePubkey?.slice(0, 16)}...</p>
+            {profile?.nip05 && !verification?.isVerified && (
+              <p className="text-xs text-muted-foreground">{profile.nip05}</p>
+            )}
             {profile?.about && (
               <p className="text-sm text-foreground mt-2">{profile.about}</p>
             )}

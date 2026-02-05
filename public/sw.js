@@ -36,6 +36,15 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+// Image caching strategy
+const isImage = (url) => {
+  return /\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)(\?.*)?$/i.test(url) ||
+         url.includes('nostr.build') ||
+         url.includes('imgur.com') ||
+         url.includes('pbs.twimg.com') ||
+         url.includes('i.imgur.com');
+};
+
 // Fetch event - serve from cache or network
 self.addEventListener("fetch", (event) => {
   const { request } = event;
@@ -49,6 +58,26 @@ self.addEventListener("fetch", (event) => {
   // Skip browser extension requests
   if (request.url.startsWith("chrome-extension://")) return;
   if (request.url.startsWith("moz-extension://")) return;
+
+  // Handle images with stale-while-revalidate strategy
+  if (isImage(request.url)) {
+    event.respondWith(
+      caches.open(CACHE_NAME + "-images").then(async (cache) => {
+        const cached = await cache.match(request);
+        
+        // Return cached immediately
+        const fetchPromise = fetch(request).then((response) => {
+          if (response.ok) {
+            cache.put(request, response.clone());
+          }
+          return response;
+        }).catch(() => cached); // Fallback to cache on error
+        
+        return cached || fetchPromise;
+      })
+    );
+    return;
+  }
 
   // Skip API calls
   if (request.url.includes("/api/")) return;

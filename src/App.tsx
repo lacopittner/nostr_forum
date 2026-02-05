@@ -13,6 +13,7 @@ import { CommunityDetailPage } from "./pages/CommunityDetailPage";
 import { PostDetailPage } from "./pages/PostDetailPage";
 import { SavePostButton } from "./components/SavePostButton";
 import { ZapButton } from "./components/ZapButton";
+import { ImageUpload } from "./components/ImageUpload";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ConnectionStatus } from "./components/ConnectionStatus";
 import { InfiniteScroll } from "./components/InfiniteScroll";
@@ -21,6 +22,7 @@ import { ToastContainer } from "./components/Toast";
 import { useVoting } from "./hooks/useVoting";
 import { useFollows } from "./hooks/useFollows";
 import { useRateLimit } from "./hooks/useRateLimit";
+import { usePullToRefresh } from "./hooks/usePullToRefresh";
 import { logger } from "./lib/logger";
 import { useToast } from "./lib/toast";
 
@@ -40,6 +42,14 @@ function Feed() {
   const [commentCounts] = useState<Record<string, number>>({});
   const [sortBy, setSortBy] = useState<"hot" | "new" | "top">("new");
   const [feedFilter, setFeedFilter] = useState<"all" | "following">("all");
+  const [showImageUpload, setShowImageUpload] = useState(false);
+  
+  // Pull to refresh
+  const { isPulling, pullDistance, isRefreshing } = usePullToRefresh(async () => {
+    seenEventIds.current.clear();
+    setUntil(undefined);
+    await loadPosts();
+  });
   
   // Infinite scroll state
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -299,7 +309,27 @@ function Feed() {
             placeholder="What's on your mind? (Posts will be Kind 1 notes)"
             className="w-full bg-accent/50 border-none rounded-lg p-3 text-sm focus:ring-1 focus:ring-orange-500 min-h-[100px] resize-none overflow-hidden"
           />
-          <div className="mt-3 flex justify-end">
+
+          {showImageUpload && (
+            <div className="mt-3">
+              <ImageUpload
+                onImageUploaded={(url) => {
+                  setNewPostContent((prev) => prev + (prev ? '\n' : '') + url);
+                  setShowImageUpload(false);
+                }}
+                onCancel={() => setShowImageUpload(false)}
+              />
+            </div>
+          )}
+
+          <div className="mt-3 flex justify-between items-center">
+            <button
+              onClick={() => setShowImageUpload(!showImageUpload)}
+              className="flex items-center space-x-2 px-4 py-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-full font-bold text-sm transition-all"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+              <span>Image</span>
+            </button>
             <button
               onClick={handleCreatePost}
               disabled={isPublishing || !newPostContent.trim()}
@@ -313,6 +343,22 @@ function Feed() {
       )}
 
       {/* Posts with Infinite Scroll */}
+      {/* Pull to refresh indicator */}
+      {isPulling && (
+        <div
+          className="flex flex-col items-center justify-center py-4 transition-all"
+          style={{ transform: `translateY(${Math.min(pullDistance / 2, 40)}px)` }}
+        >
+          <Loader2
+            size={24}
+            className={`text-orange-600 transition-all ${isRefreshing ? "animate-spin" : ""}`}
+            style={{ opacity: Math.min(pullDistance / 60, 1) }}
+          />
+          <span className="text-xs text-muted-foreground mt-1">
+            {isRefreshing ? "Refreshing..." : "Pull to refresh"}
+          </span>
+        </div>
+      )}
       <div className="space-y-4">
         {votingError && (
           <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
