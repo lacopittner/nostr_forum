@@ -2,6 +2,12 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
 import { useNostr } from "../providers/NostrProvider";
 
+interface VotingState {
+  reactions: Record<string, number>;
+  userVotes: Record<string, "UPVOTE" | "DOWNVOTE" | null>;
+  pendingVotes: Set<string>;
+}
+
 export function useVoting() {
   const { ndk, user } = useNostr();
   const [reactions, setReactions] = useState<Record<string, number>>({});
@@ -11,6 +17,7 @@ export function useVoting() {
   
   const reactionMap = useRef<Record<string, Record<string, { id: string; content: string; created_at: number }>>>({});
   const votingLock = useRef(new Set<string>());
+  const optimisticQueue = useRef<Array<{ targetId: string; type: "UPVOTE" | "DOWNVOTE" | "UNDO"; resolve: () => void }>>([]);
 
   const updateScores = useCallback(() => {
     const newScores: Record<string, number> = {};
@@ -41,6 +48,27 @@ export function useVoting() {
     }
   }, [user?.pubkey, updateScores]);
 
+  // Apply optimistic update
+  const applyOptimisticUpdate = useCallback((targetId: string, type: "UPVOTE" | "DOWNVOTE" | "UNDO") => {
+    setReactions(prev => {
+      const current = prev[targetId] || 0;
+      if (type === "UNDO") {
+        const userVote = userVotes[targetId];
+        return { ...prev, [targetId]: current + (userVote === "UPVOTE" ? -1 : userVote === "DOWNVOTE" ? 1 : 0) };
+      }
+      const change = type === "UPVOTE" ? 1 : -1;
+      const undoPrevious = userVotes[targetId] === "UPVOTE" ? -1 : userVotes[targetId] === "DOWNVOTE" ? 1 : 0;
+      return { ...prev, [targetId]: current + change + undoPrevious };
+    });
+    
+    setUserVotes(prev => ({ ...prev, [targetId]: type === "UNDO" ? null : type }));
+  }, [userVotes]);
+
+  // Revert optimistic update
+  const revertOptimisticUpdate = useCallback((targetId: string, originalVote: "UPVOTE" | "DOWNVOTE" | null) => {
+    updateScores(); // Recalculate from reactionMap
+  }, [updateScores]);
+
   const handleReaction = async (
     targetEvent: NDKEvent,
     type: "UPVOTE" | "DOWNVOTE"
@@ -59,9 +87,15 @@ export function useVoting() {
     const isUndoing = (type === "UPVOTE" && isCurrentlyUp) || 
                      (type === "DOWNVOTE" && isCurrentlyDown);
 
+    // Store original state for potential rollback
+    const originalVote = userVotes[targetId];
+
     votingLock.current.add(targetId);
     setVotingIds(prev => new Set(prev).add(targetId));
     setError(null);
+
+    // Apply optimistic update
+    applyOptimisticUpdate(targetId, isUndoing ? "UNDO" : type);
 
     try {
       if (isUndoing) {
@@ -74,7 +108,7 @@ export function useVoting() {
           await deletion.publish();
         }
         
-        // Revert optimistic update
+        // Update reaction map
         if (reactionMap.current[targetId]) {
           delete reactionMap.current[targetId][user.pubkey];
         }
@@ -99,11 +133,12 @@ export function useVoting() {
         };
       }
       
-      updateScores();
       return true;
     } catch (err) {
       console.error("Reaction failed:", err);
       setError("Failed to vote. Please try again.");
+      // Revert optimistic update
+      revertOptimisticUpdate(targetId, originalVote);
       return false;
     } finally {
       votingLock.current.delete(targetId);
