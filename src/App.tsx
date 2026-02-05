@@ -21,6 +21,8 @@ import { useVoting } from "./hooks/useVoting";
 import { logger } from "./lib/logger";
 import { useToast } from "./lib/toast";
 
+import { NDKProfile } from "./lib/types";
+
 function Feed() {
   const { ndk, user } = useNostr();
   const navigate = useNavigate();
@@ -31,7 +33,7 @@ function Feed() {
   const [postError, setPostError] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyContent, setReplyContent] = useState("");
-  const [profiles, setProfiles] = useState<Record<string, any>>({});
+  const [profiles, setProfiles] = useState<Record<string, NDKProfile>>({});
   const [commentCounts] = useState<Record<string, number>>({});
   const [sortBy, setSortBy] = useState<"hot" | "new" | "top">("new");
   

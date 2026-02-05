@@ -3,6 +3,8 @@ import { NDKEvent } from "@nostr-dev-kit/ndk";
 import { ArrowBigUp, ArrowBigDown, MessageSquare, CornerDownRight, Trash2 } from "lucide-react";
 import { useNostr } from "../providers/NostrProvider";
 
+import { NDKProfile } from "../lib/types";
+
 interface Comment {
   event: NDKEvent;
   replies: Comment[];
@@ -13,7 +15,7 @@ interface CommentThreadProps {
   reactions: Record<string, number>;
   userVotes: Record<string, "UPVOTE" | "DOWNVOTE" | null>;
   votingIds: Set<string>;
-  profiles: Record<string, any>;
+  profiles: Record<string, NDKProfile>;
   onVote: (targetId: string, targetPubkey: string, type: "UPVOTE" | "DOWNVOTE") => void;
   onReply: (parentId: string, parentPubkey: string, content: string) => void;
   onDelete?: (commentId: string) => void;
