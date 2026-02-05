@@ -190,7 +190,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
         {/* Left Sidebar - Fixed width on desktop */}
         <aside className={`
-          fixed lg:static inset-y-0 left-0 w-64 bg-background z-50 transform lg:translate-x-0 transition-transform duration-300 ease-in-out border-r
+          fixed lg:static inset-y-0 left-0 w-[272px] bg-background z-50 transform lg:translate-x-0 transition-transform duration-300 ease-in-out border-r
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
           top-14 lg:top-0 h-[calc(100vh-3.5rem)] lg:h-auto
         `}>
@@ -277,15 +277,15 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
           </div>
         </aside>
 
-        {/* Main Content - Full width on desktop, wider posts */}
-        <main className="flex-1 min-w-0 p-3 sm:p-4 lg:p-6 pb-20 lg:pb-6">
-          <div className="max-w-none lg:max-w-6xl mx-auto">
+        {/* Main Content - Reddit-like max-width */}
+        <main className="flex-1 min-w-0 p-0 sm:p-4 lg:p-6 pb-20 lg:pb-6">
+          <div className="max-w-[756px] mx-auto">
             {children}
           </div>
         </main>
 
-        {/* Right Sidebar - Desktop only, wider */}
-        <aside className="w-80 hidden xl:block p-6 space-y-6 flex-shrink-0">
+        {/* Right Sidebar - Desktop only, fixed width 316px */}
+        <aside className="w-[316px] hidden xl:block p-6 space-y-6 flex-shrink-0">
           <TrendingCommunities />
           <NostrGuide />
         </aside>

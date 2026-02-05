@@ -451,98 +451,102 @@ function Feed() {
           hasMore={hasMore}
           isLoading={isLoadingMore}
         >
-          <div className="flex flex-col space-y-4">
+          <div className="flex flex-col space-y-2">
             {posts.map((post) => (
-              <div key={post.id} className="bg-card border rounded-xl shadow-sm hover:border-[var(--primary)]/20 transition-all group">
+              <article 
+                key={post.id} 
+                className="bg-card border border-border/50 hover:border-[var(--primary)]/30 transition-colors group cursor-pointer"
+                onClick={() => navigate(`/post/${post.id}`)}
+              >
                 <div className="flex">
-                  <div className="w-12 bg-accent/30 flex flex-col items-center py-4 space-y-1 rounded-l-xl">
+                  {/* Voting column - Reddit style */}
+                  <div className="w-10 bg-accent/20 flex flex-col items-center py-2 space-y-0.5">
                     <button 
-                      onClick={() => handleVote(post, "UPVOTE")}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleVote(post, "UPVOTE");
+                      }}
                       disabled={votingIds.has(post.id)}
-                      className={`transition-colors ${userVotes[post.id] === "UPVOTE" ? "text-[var(--primary)]" : "text-muted-foreground hover:text-[var(--primary)]"} ${votingIds.has(post.id) ? "opacity-50 cursor-not-allowed" : ""}`}
+                      className={`p-1 rounded transition-colors ${userVotes[post.id] === "UPVOTE" ? "text-[var(--primary)]" : "text-muted-foreground hover:bg-accent hover:text-[var(--primary)]"} ${votingIds.has(post.id) ? "opacity-50 cursor-not-allowed" : ""}`}
                     >
-                      <ArrowBigUp size={24} fill={userVotes[post.id] === "UPVOTE" ? "currentColor" : "none"} />
+                      <ArrowBigUp size={22} fill={userVotes[post.id] === "UPVOTE" ? "currentColor" : "none"} />
                     </button>
-                    <span className={`text-[13px] font-black ${
+                    <span className={`text-xs font-bold ${
                       userVotes[post.id] === "UPVOTE" ? "text-[var(--primary)]" : 
-                      userVotes[post.id] === "DOWNVOTE" ? "text-blue-600" : ""
+                      userVotes[post.id] === "DOWNVOTE" ? "text-blue-600" : "text-muted-foreground"
                     }`}>
                       {reactions[post.id] || 0}
                     </span>
                     <button 
-                      onClick={() => handleVote(post, "DOWNVOTE")}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleVote(post, "DOWNVOTE");
+                      }}
                       disabled={votingIds.has(post.id)}
-                      className={`transition-colors ${userVotes[post.id] === "DOWNVOTE" ? "text-blue-600" : "text-muted-foreground hover:text-blue-600"} ${votingIds.has(post.id) ? "opacity-50 cursor-not-allowed" : ""}`}
+                      className={`p-1 rounded transition-colors ${userVotes[post.id] === "DOWNVOTE" ? "text-blue-600" : "text-muted-foreground hover:bg-accent hover:text-blue-600"} ${votingIds.has(post.id) ? "opacity-50 cursor-not-allowed" : ""}`}
                     >
-                      <ArrowBigDown size={24} fill={userVotes[post.id] === "DOWNVOTE" ? "currentColor" : "none"} />
+                      <ArrowBigDown size={22} fill={userVotes[post.id] === "DOWNVOTE" ? "currentColor" : "none"} />
                     </button>
                   </div>
-                  <div className="p-4 flex-1 cursor-pointer" onClick={() => navigate(`/post/${post.id}`)}>
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground mb-2">
-                      <div className="flex items-center space-x-1">
-                        <div className="w-4 h-4 bg-[var(--primary)] rounded-full overflow-hidden">
-                          {profiles[post.pubkey]?.image && (
-                            <img src={profiles[post.pubkey].image} className="w-full h-full object-cover" />
-                          )}
-                        </div>
-                        <span className="font-bold text-foreground lowercase">r/nostr</span>
-                      </div>
+                  
+                  {/* Content column */}
+                  <div className="flex-1 p-3 min-w-0">
+                    {/* Post header - metadata */}
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-2">
+                      <span className="font-bold text-foreground/80 hover:underline">r/nostr</span>
                       <span>•</span>
-                      <span className="hover:underline font-medium text-foreground">
-                        {profiles[post.pubkey]?.displayName || profiles[post.pubkey]?.name || post.pubkey.slice(0, 8)}
+                      <span className="hover:underline">Posted by</span>
+                      <span className="hover:underline text-foreground/60">
+                        {profiles[post.pubkey]?.displayName || profiles[post.pubkey]?.name || `npub...${post.pubkey.slice(-8)}`}
                       </span>
                       <span>•</span>
-                      <span>{new Date(post.created_at! * 1000).toLocaleTimeString()}</span>
+                      <span>{new Date(post.created_at! * 1000).toLocaleDateString()}</span>
                     </div>
                     
-                    <div className="mb-4">
-                      <PostContent content={post.content} maxLines={8} />
+                    {/* Post content */}
+                    <div className="mb-3">
+                      <PostContent content={post.content} maxLines={6} />
                     </div>
 
-                    <div className="flex items-center gap-4">
+                    {/* Action bar - Reddit style */}
+                    <div className="flex items-center gap-1">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/post/${post.id}`);
+                        }}
+                        className="flex items-center gap-1.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground hover:text-foreground text-xs font-bold"
+                      >
+                        <MessageSquare size={16} />
+                        <span>
+                          {commentCounts[post.id] ? `${commentCounts[post.id]} comments` : "0 comments"}
+                        </span>
+                      </button>
+                      
                       <button 
                         onClick={(e) => {
                           e.stopPropagation();
                           setReplyingTo(replyingTo === post.id ? null : post.id);
                         }}
-                        className="flex items-center space-x-1.5 px-3 py-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground hover:text-foreground"
+                        className="flex items-center gap-1.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground hover:text-foreground text-xs font-bold"
                       >
                         <MessageSquare size={16} />
-                        <span className="text-xs font-bold">Reply</span>
+                        <span>Reply</span>
                       </button>
-                      
-                      <div 
-                        className="flex items-center space-x-1.5 px-3 py-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground hover:text-foreground cursor-pointer"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/post/${post.id}`);
-                        }}
-                      >
-                        <MessageSquare size={16} />
-                        <span className="text-xs font-bold">
-                          {commentCounts[post.id] !== undefined ? `${commentCounts[post.id]} comments` : "View comments"}
-                        </span>
-                      </div>
                       
                       <button 
                         onClick={(e) => e.stopPropagation()}
-                        className="flex items-center space-x-1.5 px-3 py-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground hover:text-foreground"
+                        className="flex items-center gap-1.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground hover:text-foreground text-xs font-bold"
                       >
                         <Share2 size={16} />
-                        <span className="text-xs font-bold">Share</span>
+                        <span>Share</span>
                       </button>
                       
-                      <div 
-                        onClick={(e) => e.stopPropagation()}
-                        className="px-3 py-1.5"
-                      >
+                      <div onClick={(e) => e.stopPropagation()} className="flex items-center">
                         <SavePostButton post={post} size="sm" />
                       </div>
                       
-                      <div 
-                        onClick={(e) => e.stopPropagation()}
-                        className="px-3 py-1.5"
-                      >
+                      <div onClick={(e) => e.stopPropagation()} className="flex items-center">
                         <ZapButton 
                           targetPubkey={post.pubkey} 
                           eventId={post.id}
@@ -552,47 +556,51 @@ function Feed() {
                       
                       <button 
                         onClick={(e) => e.stopPropagation()}
-                        className="p-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground"
+                        className="p-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground ml-auto"
                       >
                         <MoreHorizontal size={16} />
                       </button>
                     </div>
 
+                    {/* Reply form */}
                     {replyingTo === post.id && (
-                      <div className="mt-4 space-y-3 p-3 bg-accent/20 rounded-lg" onClick={(e) => e.stopPropagation()}>
-                        <textarea
-                          value={replyContent}
-                          onChange={(e) => setReplyContent(e.target.value)}
-                          placeholder="Write your reply..."
-                          className="w-full bg-background border rounded-lg p-2 text-sm focus:ring-1 focus:ring-[var(--primary)] min-h-[80px] inherit"
-                        />
-                        <div className="flex justify-end space-x-2">
-                          <button 
-                            onClick={() => setReplyingTo(null)}
-                            className="px-4 py-1.5 text-xs font-bold hover:bg-accent rounded-full transition-colors"
-                          >
-                            Cancel
-                          </button>
-                          <button 
-                            onClick={() => handleReply(post)}
-                            disabled={!replyContent.trim() || isPublishing}
-                            className="flex items-center gap-2 px-4 py-1.5 bg-[var(--primary)] text-white rounded-full text-xs font-bold hover:bg-[var(--primary-dark)] disabled:opacity-50"
-                          >
-                            {isPublishing ? (
-                              <>
-                                <Loader2 size={14} className="animate-spin" />
-                                Posting...
-                              </>
-                            ) : (
-                              "Post Reply"
-                            )}
-                          </button>
+                      <div className="mt-3 pt-3 border-t border-border/50" onClick={(e) => e.stopPropagation()}>
+                        <div className="space-y-2">
+                          <textarea
+                            value={replyContent}
+                            onChange={(e) => setReplyContent(e.target.value)}
+                            placeholder="What are your thoughts?"
+                            className="w-full bg-background border border-border rounded-md p-2.5 text-sm focus:ring-1 focus:ring-[var(--primary)] focus:border-[var(--primary)] min-h-[100px] resize-y"
+                            autoFocus
+                          />
+                          <div className="flex justify-end gap-2">
+                            <button 
+                              onClick={() => setReplyingTo(null)}
+                              className="px-4 py-1.5 text-xs font-bold hover:bg-accent rounded-full transition-colors"
+                            >
+                              Cancel
+                            </button>
+                            <button 
+                              onClick={() => handleReply(post)}
+                              disabled={!replyContent.trim() || isPublishing}
+                              className="flex items-center gap-2 px-4 py-1.5 bg-[var(--primary)] text-white rounded-full text-xs font-bold hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-colors"
+                            >
+                              {isPublishing ? (
+                                <>
+                                  <Loader2 size={14} className="animate-spin" />
+                                  Posting...
+                                </>
+                              ) : (
+                                "Comment"
+                              )}
+                            </button>
+                          </div>
                         </div>
                       </div>
                     )}
                   </div>
                 </div>
-              </div>
+              </article>
             ))}
           </div>
         </InfiniteScroll>
