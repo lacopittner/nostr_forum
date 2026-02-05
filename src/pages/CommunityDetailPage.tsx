@@ -2,12 +2,13 @@ import { useNostr } from "../providers/NostrProvider";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
-import { Edit2, Send, ArrowLeft, Shield, Users, ArrowBigUp, ArrowBigDown, Gavel, UserPlus, UserCheck, Search, Book } from "lucide-react";
+import { Edit2, Send, ArrowLeft, Shield, Users, ArrowBigUp, ArrowBigDown, Gavel, UserPlus, UserCheck, Search, Book, AlertCircle } from "lucide-react";
 import { EditCommunityModal } from "../components/EditCommunityModal";
 import { ManageModeratorsModal } from "../components/ManageModeratorsModal";
 import { ManageBlockedUsersModal } from "../components/ManageBlockedUsersModal";
 import { useCommunityBlocks } from "../hooks/useCommunityBlocks";
 import { useCommunityMembership } from "../hooks/useCommunityMembership";
+import { useVoting } from "../hooks/useVoting";
 import { FlairSelector } from "../components/FlairSelector";
 import { PostActionsMenu } from "../components/PostActionsMenu";
 import { CommunityWikiModal } from "../components/CommunityWikiModal";
@@ -30,6 +31,7 @@ export function CommunityDetailPage() {
   const [selectedFlair, setSelectedFlair] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredPosts, setFilteredPosts] = useState<NDKEvent[]>([]);
+  const [postError, setPostError] = useState<string | null>(null);
   
   // Track edited posts
   const [editedPosts, setEditedPosts] = useState<Set<string>>(new Set());
@@ -38,15 +40,14 @@ export function CommunityDetailPage() {
   const { isMember, joinCommunity, leaveCommunity } = useCommunityMembership();
   const [isJoining, setIsJoining] = useState(false);
   
-  // Voting state
-  const [reactions, setReactions] = useState<Record<string, number>>({});
-  const [userVotes, setUserVotes] = useState<Record<string, "UPVOTE" | "DOWNVOTE" | null>>({});
-  const [votingIds, setVotingIds] = useState<Set<string>>(new Set());
+  // Voting - use the custom hook instead of duplicating logic
+  const { reactions, userVotes, votingIds, error: votingError, handleReaction, processIncomingReaction, processIncomingDeletion } = useVoting();
+  
+  // Profile fetching
   const [profiles, setProfiles] = useState<Record<string, any>>({});
+  const profileFetchQueue = useRef(new Set<string>());
   
   const seenPostIds = useRef(new Set<string>());
-  const reactionMap = useRef<Record<string, Record<string, { id: string; content: string; created_at: number }>>>({});
-  const votingLock = useRef(new Set<string>());
   
   // Block checking
   const { isCurrentUserBlocked } = useCommunityBlocks(community);
@@ -74,36 +75,21 @@ export function CommunityDetailPage() {
 
   // Fetch profile helper
   const fetchProfile = useCallback(async (pubkey: string) => {
-    if (profiles[pubkey]) return;
+    if (profiles[pubkey] || profileFetchQueue.current.has(pubkey)) return;
+    profileFetchQueue.current.add(pubkey);
+    
     try {
       const profile = await ndk.getUser({ pubkey }).fetchProfile();
       if (profile) {
         setProfiles(prev => ({ ...prev, [pubkey]: profile }));
       }
     } catch (e) {
-      // Ignore errors
+      console.error("Failed to fetch profile:", pubkey, e);
+      // Silently fail - user pubkey will be displayed instead
     }
   }, [ndk, profiles]);
 
-  const updateScores = useCallback(() => {
-    const newScores: Record<string, number> = {};
-    const newUserVotes: Record<string, "UPVOTE" | "DOWNVOTE" | null> = {};
 
-    for (const [postId, users] of Object.entries(reactionMap.current)) {
-      let score = 0;
-      for (const [pubkey, reaction] of Object.entries(users)) {
-        if (reaction.content === "NEUTRAL") continue;
-        const isDown = reaction.content === "DOWNVOTE" || reaction.content === "-";
-        score += isDown ? -1 : 1;
-        if (user && pubkey === user.pubkey) {
-          newUserVotes[postId] = isDown ? "DOWNVOTE" : "UPVOTE";
-        }
-      }
-      newScores[postId] = score;
-    }
-    setReactions(newScores);
-    setUserVotes(newUserVotes);
-  }, [user?.pubkey]);
 
   // Fetch community
   useEffect(() => {
@@ -163,16 +149,15 @@ export function CommunityDetailPage() {
           { kinds: [NDKKind.Reaction], "#e": [event.id] },
           { closeOnEose: true }
         ).on("event", (reactionEvent: NDKEvent) => {
-          if (!reactionMap.current[event.id]) reactionMap.current[event.id] = {};
-          const existing = reactionMap.current[event.id][reactionEvent.pubkey];
-          if (!existing || reactionEvent.created_at! > existing.created_at) {
-            reactionMap.current[event.id][reactionEvent.pubkey] = {
-              id: reactionEvent.id,
-              content: reactionEvent.content,
-              created_at: reactionEvent.created_at!
-            };
-            updateScores();
-          }
+          processIncomingReaction(reactionEvent);
+        });
+        
+        // Subscribe to deletion events
+        ndk.subscribe(
+          { kinds: [5], "#e": [event.id] },
+          { closeOnEose: true }
+        ).on("event", (deletionEvent: NDKEvent) => {
+          processIncomingDeletion(deletionEvent);
         });
       }
     });
@@ -180,7 +165,7 @@ export function CommunityDetailPage() {
     return () => {
       postSub.stop();
     };
-  }, [community, ndk, pubkey, communityId, fetchProfile, updateScores]);
+  }, [community, ndk, pubkey, communityId, fetchProfile, processIncomingReaction, processIncomingDeletion]);
 
   // Filter posts by search query
   useEffect(() => {
@@ -285,11 +270,13 @@ export function CommunityDetailPage() {
     
     // Check if user is blocked
     if (isCurrentUserBlocked()) {
-      alert("You have been blocked from posting in this community.");
+      setPostError("You have been blocked from posting in this community.");
       return;
     }
 
     setIsPublishing(true);
+    setPostError(null);
+    
     try {
       const event = new NDKEvent(ndk);
       event.kind = NDKKind.Text;
@@ -308,71 +295,17 @@ export function CommunityDetailPage() {
       
       await event.publish();
       setNewPostContent("");
+      setSelectedFlair(null);
     } catch (error) {
-      console.error("Failed to publish post", error);
-      alert("Failed to publish post. Check if your relay is running.");
+      console.error("Failed to publish post:", error);
+      setPostError("Failed to publish post. Check your relay connection.");
     } finally {
       setIsPublishing(false);
     }
   };
 
-  const handleReaction = async (post: NDKEvent, type: "UPVOTE" | "DOWNVOTE") => {
-    if (!user || votingLock.current.has(post.id)) return;
-
-    const lastReaction = reactionMap.current[post.id]?.[user.pubkey];
-    const lastContent = lastReaction?.content;
-    const lastId = lastReaction?.id;
-
-    const isCurrentlyUp = lastContent === "UPVOTE" || lastContent === "+";
-    const isCurrentlyDown = lastContent === "DOWNVOTE" || lastContent === "-";
-    const isUndoing = (type === "UPVOTE" && isCurrentlyUp) || 
-                     (type === "DOWNVOTE" && isCurrentlyDown);
-    
-    votingLock.current.add(post.id);
-    setVotingIds(prev => new Set(prev).add(post.id));
-
-    try {
-      if (isUndoing) {
-        if (lastId) {
-          const deletion = new NDKEvent(ndk);
-          deletion.kind = 5;
-          deletion.content = "Unvoting";
-          deletion.tags = [["e", lastId]];
-          await deletion.publish();
-        }
-        if (reactionMap.current[post.id]) {
-          delete reactionMap.current[post.id][user.pubkey];
-        }
-      } else {
-        const reaction = new NDKEvent(ndk);
-        reaction.kind = NDKKind.Reaction;
-        reaction.content = type === "UPVOTE" ? "+" : "-";
-        reaction.tags = [
-          ["e", post.id],
-          ["p", post.pubkey]
-        ];
-        
-        if (!reactionMap.current[post.id]) reactionMap.current[post.id] = {};
-        reactionMap.current[post.id][user.pubkey] = {
-          id: reaction.id,
-          content: reaction.content,
-          created_at: Math.floor(Date.now() / 1000)
-        };
-
-        await reaction.publish();
-      }
-      
-      updateScores();
-    } catch (error) {
-      console.error("Reaction failed", error);
-    } finally {
-      votingLock.current.delete(post.id);
-      setVotingIds(prev => {
-        const next = new Set(prev);
-        next.delete(post.id);
-        return next;
-      });
-    }
+  const handleVote = (post: NDKEvent, type: "UPVOTE" | "DOWNVOTE") => {
+    handleReaction(post, type);
   };
 
   const communityInfo = getCommunityInfo();
@@ -574,6 +507,12 @@ export function CommunityDetailPage() {
       {/* Create Post */}
       {user && !isCurrentUserBlocked() && (
         <div className="bg-card border rounded-xl p-4 shadow-sm">
+          {postError && (
+            <div className="mb-3 flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+              <AlertCircle size={16} />
+              <span>{postError}</span>
+            </div>
+          )}
           <textarea
             value={newPostContent}
             onChange={(e) => setNewPostContent(e.target.value)}
@@ -602,6 +541,13 @@ export function CommunityDetailPage() {
 
       {/* Posts */}
       <div className="space-y-4">
+        {votingError && (
+          <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+            <AlertCircle size={16} />
+            <span>{votingError}</span>
+          </div>
+        )}
+        
         {/* Search Posts */}
         <div className="bg-card border rounded-xl p-4 shadow-sm">
           <div className="relative">
@@ -630,7 +576,7 @@ export function CommunityDetailPage() {
               {/* Voting */}
               <div className="w-12 bg-accent/30 flex flex-col items-center py-4 space-y-1 rounded-l-xl">
                 <button 
-                  onClick={() => handleReaction(post, "UPVOTE")}
+                  onClick={() => handleVote(post, "UPVOTE")}
                   disabled={votingIds.has(post.id)}
                   className={`transition-colors ${userVotes[post.id] === "UPVOTE" ? "text-orange-600" : "text-muted-foreground hover:text-orange-600"} ${votingIds.has(post.id) ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
@@ -643,7 +589,7 @@ export function CommunityDetailPage() {
                   {reactions[post.id] || 0}
                 </span>
                 <button 
-                  onClick={() => handleReaction(post, "DOWNVOTE")}
+                  onClick={() => handleVote(post, "DOWNVOTE")}
                   disabled={votingIds.has(post.id)}
                   className={`transition-colors ${userVotes[post.id] === "DOWNVOTE" ? "text-blue-600" : "text-muted-foreground hover:text-blue-600"} ${votingIds.has(post.id) ? "opacity-50 cursor-not-allowed" : ""}`}
                 >

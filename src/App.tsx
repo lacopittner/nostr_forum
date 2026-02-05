@@ -1,6 +1,6 @@
 import { NostrProvider, useNostr } from "./providers/NostrProvider";
 import { AppShell } from "./components/layout/AppShell";
-import { ArrowBigUp, ArrowBigDown, MessageSquare, Share2, MoreHorizontal, Send } from "lucide-react";
+import { ArrowBigUp, ArrowBigDown, MessageSquare, Share2, MoreHorizontal, Send, AlertCircle } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
 import { BrowserRouter as Router, Routes, Route, useNavigate } from "react-router-dom";
@@ -12,73 +12,44 @@ import { CommunityDetailPage } from "./pages/CommunityDetailPage";
 import { PostDetailPage } from "./pages/PostDetailPage";
 import { SavePostButton } from "./components/SavePostButton";
 import { ZapButton } from "./components/ZapButton";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { useVoting } from "./hooks/useVoting";
 
 function Feed() {
   const { ndk, user } = useNostr();
   const navigate = useNavigate();
   const [posts, setPosts] = useState<NDKEvent[]>([]);
-  const [reactions, setReactions] = useState<Record<string, number>>({});
-  const [userVotes, setUserVotes] = useState<Record<string, "UPVOTE" | "DOWNVOTE" | null>>({});
   const [newPostContent, setNewPostContent] = useState("");
   const [isPublishing, setIsPublishing] = useState(false);
-  const [votingIds, setVotingIds] = useState<Set<string>>(new Set());
+  const [postError, setPostError] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyContent, setReplyContent] = useState("");
-  const [postVoters, setPostVoters] = useState<Record<string, { up: string[], down: string[] }>>({});
   const [profiles, setProfiles] = useState<Record<string, any>>({});
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
   const [sortBy, setSortBy] = useState<"hot" | "new" | "top">("hot");
 
+  // Voting - use the custom hook instead of duplicating logic
+  const { reactions, userVotes, votingIds, error: votingError, handleReaction, processIncomingReaction, processIncomingDeletion } = useVoting();
+
   const seenEventIds = useRef(new Set<string>());
-  const reactionMap = useRef<Record<string, Record<string, { id: string, content: string, created_at: number }>>>({});
   const profileFetchQueue = useRef(new Set<string>());
-  const votingLock = useRef(new Set<string>());
 
   const fetchProfile = useCallback(async (pubkey: string) => {
     if (profiles[pubkey] || profileFetchQueue.current.has(pubkey)) return;
     profileFetchQueue.current.add(pubkey);
 
-    const profile = await ndk.getUser({ pubkey }).fetchProfile();
-    if (profile) {
-      setProfiles(prev => ({ ...prev, [pubkey]: profile }));
+    try {
+      const profile = await ndk.getUser({ pubkey }).fetchProfile();
+      if (profile) {
+        setProfiles(prev => ({ ...prev, [pubkey]: profile }));
+      }
+    } catch (e) {
+      console.error("Failed to fetch profile:", pubkey, e);
+      // Silently fail - user pubkey will be displayed instead
     }
   }, [ndk, profiles]);
 
-  const updateScores = useCallback(() => {
-    const newScores: Record<string, number> = {};
-    const newUserVotes: Record<string, "UPVOTE" | "DOWNVOTE" | null> = {};
-    const newVoters: Record<string, { up: string[], down: string[] }> = {};
 
-    for (const [postId, users] of Object.entries(reactionMap.current)) {
-      let score = 0;
-      newVoters[postId] = { up: [], down: [] };
-
-      for (const [pubkey, reaction] of Object.entries(users)) {
-        if (reaction.content === "NEUTRAL") continue;
-        
-        const isDown = reaction.content === "DOWNVOTE" || reaction.content === "-";
-        const value = isDown ? -1 : 1;
-        score += value;
-        
-        // Ensure we fetch the profile of the voter
-        fetchProfile(pubkey);
-
-        if (isDown) {
-          newVoters[postId].down.push(pubkey);
-        } else {
-          newVoters[postId].up.push(pubkey);
-        }
-        
-        if (user && pubkey === user.pubkey) {
-          newUserVotes[postId] = isDown ? "DOWNVOTE" : "UPVOTE";
-        }
-      }
-      newScores[postId] = score;
-    }
-    setReactions(newScores);
-    setUserVotes(newUserVotes);
-    setPostVoters(newVoters);
-  }, [user?.pubkey, fetchProfile]);
 
   // Fetch posts and reactions
   useEffect(() => {
@@ -121,76 +92,22 @@ function Feed() {
       ).on("event", (reactionEvent: NDKEvent) => {
         if (seenEventIds.current.has(reactionEvent.id)) return;
         seenEventIds.current.add(reactionEvent.id);
-
-        if (!reactionMap.current[event.id]) reactionMap.current[event.id] = {};
-        const existing = reactionMap.current[event.id][reactionEvent.pubkey];
-        if (!existing || reactionEvent.created_at! > existing.created_at) {
-          reactionMap.current[event.id][reactionEvent.pubkey] = {
-            id: reactionEvent.id,
-            content: reactionEvent.content,
-            created_at: reactionEvent.created_at!
-          };
-          updateScores();
-        }
+        processIncomingReaction(reactionEvent);
       });
-    });
-
-    // Subscribe to Kind 7 (General stream)
-    const reactionSub = ndk.subscribe(
-      { kinds: [NDKKind.Reaction], limit: 500 },
-      { closeOnEose: false }
-    );
-
-    reactionSub.on("event", (event: NDKEvent) => {
-      if (seenEventIds.current.has(event.id)) return;
-      seenEventIds.current.add(event.id);
-
-      const targetId = event.tags.find(t => t[0] === "e")?.[1];
-      if (targetId) {
-        if (!reactionMap.current[targetId]) reactionMap.current[targetId] = {};
-        
-        const existing = reactionMap.current[targetId][event.pubkey];
-        if (!existing || event.created_at! > existing.created_at) {
-          reactionMap.current[targetId][event.pubkey] = {
-            id: event.id,
-            content: event.content,
-            created_at: event.created_at!
-          };
-          updateScores();
-        }
-      }
-    });
-
-    // Subscribe to Kind 5 (Deletions)
-    const deletionSub = ndk.subscribe(
-      { kinds: [5], limit: 100 },
-      { closeOnEose: false }
-    );
-
-    deletionSub.on("event", (event: NDKEvent) => {
-      const targetIds = event.tags.filter(t => t[0] === "e").map(t => t[1]);
-      let changed = false;
-
-      for (const targetId of targetIds) {
-        for (const [postId, users] of Object.entries(reactionMap.current)) {
-          for (const [pubkey, reaction] of Object.entries(users)) {
-            if (reaction.id === targetId) {
-              delete reactionMap.current[postId][pubkey];
-              changed = true;
-            }
-          }
-        }
-      }
-
-      if (changed) updateScores();
+      
+      // Subscribe to deletion events for this post
+      ndk.subscribe(
+        { kinds: [5], "#e": [event.id] },
+        { closeOnEose: true }
+      ).on("event", (deletionEvent: NDKEvent) => {
+        processIncomingDeletion(deletionEvent);
+      });
     });
 
     return () => {
       postSub.stop();
-      reactionSub.stop();
-      deletionSub.stop();
     };
-  }, [ndk, updateScores, sortBy]);
+  }, [ndk, processIncomingReaction, processIncomingDeletion, sortBy]);
 
   const sortPosts = (postList: NDKEvent[], sort: "hot" | "new" | "top"): NDKEvent[] => {
     return [...postList].sort((a, b) => {
@@ -224,6 +141,8 @@ function Feed() {
     if (!newPostContent.trim() || !user || isPublishing) return;
 
     setIsPublishing(true);
+    setPostError(null);
+    
     try {
       const event = new NDKEvent(ndk);
       event.kind = NDKKind.Text;
@@ -232,92 +151,15 @@ function Feed() {
       await event.publish();
       setNewPostContent("");
     } catch (error) {
-      console.error("Failed to publish post", error);
-      alert("Failed to publish post. Check if your relay is running.");
+      console.error("Failed to publish post:", error);
+      setPostError("Failed to publish post. Check your relay connection.");
     } finally {
       setIsPublishing(false);
     }
   };
 
-  const handleReaction = async (post: NDKEvent, type: "UPVOTE" | "DOWNVOTE") => {
-    if (!user || votingLock.current.has(post.id)) return;
-
-    // Use reactionMap.current directly for logic to avoid state race conditions
-    const lastReaction = reactionMap.current[post.id]?.[user.pubkey];
-    const lastContent = lastReaction?.content;
-    const lastId = lastReaction?.id;
-
-    const isCurrentlyUp = lastContent === "UPVOTE" || lastContent === "+";
-    const isCurrentlyDown = lastContent === "DOWNVOTE" || lastContent === "-";
-
-    const isUndoing = (type === "UPVOTE" && isCurrentlyUp) || 
-                     (type === "DOWNVOTE" && isCurrentlyDown);
-    
-    // 1. Lock voting (Synchronous)
-    votingLock.current.add(post.id);
-    setVotingIds(prev => new Set(prev).add(post.id));
-
-    try {
-      if (isUndoing) {
-        // YAKIHONNE STYLE: "Unlike" by deleting the reaction event (Kind 5)
-        if (lastId) {
-          const deletion = new NDKEvent(ndk);
-          deletion.kind = 5;
-          deletion.content = "Unvoting from Nostr-Forum";
-          deletion.tags = [["e", lastId]];
-          await deletion.publish();
-        }
-        
-        // Optimistic clear
-        if (reactionMap.current[post.id]) {
-          delete reactionMap.current[post.id][user.pubkey];
-        }
-      } else {
-        // Publish new reaction (Kind 7)
-        const reaction = new NDKEvent(ndk);
-        reaction.kind = NDKKind.Reaction;
-        reaction.content = type === "UPVOTE" ? "+" : "-";
-        reaction.tags = [
-          ["e", post.id],
-          ["p", post.pubkey]
-        ];
-        
-        // Mark as seen so listener doesn't process older echo
-        seenEventIds.current.add(reaction.id);
-        
-        // Optimistic Update
-        if (!reactionMap.current[post.id]) reactionMap.current[post.id] = {};
-        reactionMap.current[post.id][user.pubkey] = {
-          id: reaction.id,
-          content: reaction.content,
-          created_at: Math.floor(Date.now() / 1000)
-        };
-
-        await reaction.publish();
-      }
-      
-      // 3. Re-calculate scores and UI
-      updateScores();
-
-      // Log for the user
-      const postReactions = reactionMap.current[post.id] || {};
-      let score = 0;
-      for (const r of Object.values(postReactions)) {
-        score += (r.content === "-" || r.content === "DOWNVOTE") ? -1 : 1;
-      }
-      console.log(`[VOTE LOG] ${user.npub.slice(0, 12)}... ${isUndoing ? 'deleted' : 'sent'} ${type.toLowerCase()} on post ${post.id.slice(0, 8)}. New score: ${score}`);
-
-    } catch (error) {
-      console.error("Reaction failed", error);
-    } finally {
-      // 5. Release lock
-      votingLock.current.delete(post.id);
-      setVotingIds(prev => {
-        const next = new Set(prev);
-        next.delete(post.id);
-        return next;
-      });
-    }
+  const handleVote = (post: NDKEvent, type: "UPVOTE" | "DOWNVOTE") => {
+    handleReaction(post, type);
   };
 
   const handleReply = async (post: NDKEvent) => {
@@ -356,6 +198,12 @@ function Feed() {
       {/* Create Post Area */}
       {user && (
         <div className="bg-card border rounded-xl p-4 shadow-sm">
+          {postError && (
+            <div className="mb-3 flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+              <AlertCircle size={16} />
+              <span>{postError}</span>
+            </div>
+          )}
           <textarea
             value={newPostContent}
             onChange={(e) => setNewPostContent(e.target.value)}
@@ -375,8 +223,16 @@ function Feed() {
         </div>
       )}
 
-      {/* Hero Header from previous version, only if no posts */}
-      {posts.length === 0 && (
+      {/* Posts */}
+      <div className="space-y-4">
+        {votingError && (
+          <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+            <AlertCircle size={16} />
+            <span>{votingError}</span>
+          </div>
+        )}
+        
+        {posts.length === 0 && (
         <div className="relative overflow-hidden bg-gradient-to-br from-orange-600 to-orange-400 rounded-2xl p-6 sm:p-8 text-white shadow-lg shadow-orange-600/20">
           <div className="relative z-10">
             <h1 className="text-3xl sm:text-4xl font-black tracking-tighter mb-2">The Relay is Quiet...</h1>
@@ -415,7 +271,7 @@ function Feed() {
             <div className="flex">
               <div className="w-12 bg-accent/30 flex flex-col items-center py-4 space-y-1 rounded-l-xl">
                 <button 
-                  onClick={() => handleReaction(post, "UPVOTE")}
+                  onClick={() => handleVote(post, "UPVOTE")}
                   disabled={votingIds.has(post.id)}
                   className={`transition-colors ${userVotes[post.id] === "UPVOTE" ? "text-orange-600" : "text-muted-foreground hover:text-orange-600"} ${votingIds.has(post.id) ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
@@ -428,7 +284,7 @@ function Feed() {
                   {reactions[post.id] || 0}
                 </span>
                 <button 
-                  onClick={() => handleReaction(post, "DOWNVOTE")}
+                  onClick={() => handleVote(post, "DOWNVOTE")}
                   disabled={votingIds.has(post.id)}
                   className={`transition-colors ${userVotes[post.id] === "DOWNVOTE" ? "text-blue-600" : "text-muted-foreground hover:text-blue-600"} ${votingIds.has(post.id) ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
@@ -456,28 +312,6 @@ function Feed() {
                 <div className="text-sm text-foreground whitespace-pre-wrap leading-relaxed mb-4">
                   {post.content}
                 </div>
-
-                {/* Voter List */}
-                {(postVoters[post.id]?.up.length > 0 || postVoters[post.id]?.down.length > 0) && (
-                  <div className="mb-4 flex flex-wrap gap-1 items-center">
-                    <span className="text-[10px] text-muted-foreground mr-1 uppercase font-bold tracking-wider">Voters:</span>
-                    {postVoters[post.id]?.up.slice(0, 5).map(pk => (
-                      <span key={pk} className="text-[10px] px-1.5 py-0.5 bg-orange-500/10 text-orange-600 rounded-sm border border-orange-500/20">
-                        {profiles[pk]?.name || pk.slice(0, 4)} (up)
-                      </span>
-                    ))}
-                    {postVoters[post.id]?.down.slice(0, 5).map(pk => (
-                      <span key={pk} className="text-[10px] px-1.5 py-0.5 bg-blue-500/10 text-blue-600 rounded-sm border border-blue-500/20">
-                        {profiles[pk]?.name || pk.slice(0, 4)} (down)
-                      </span>
-                    ))}
-                    {(postVoters[post.id]?.up.length + postVoters[post.id]?.down.length) > 10 && (
-                      <span className="text-[10px] text-muted-foreground italic">
-                        +{(postVoters[post.id].up.length + postVoters[post.id].down.length) - 10} more
-                      </span>
-                    )}
-                  </div>
-                )}
 
                 <div className="flex items-center gap-4">
                   <button 
@@ -571,27 +405,30 @@ function Feed() {
           </div>
         ))}
       </div>
+      </div>
     </div>
   );
 }
 
 function App() {
   return (
-    <NostrProvider>
-      <Router>
-        <AppShell>
-          <Routes>
-            <Route path="/" element={<Feed />} />
-            <Route path="/post/:postId" element={<PostDetailPage />} />
-            <Route path="/profile/:pubkey" element={<ProfilePage />} />
-            <Route path="/search" element={<SearchPage />} />
-            <Route path="/relays" element={<RelayManagementPage />} />
-            <Route path="/communities" element={<CommunitiesPage />} />
-            <Route path="/community/:pubkey/:communityId" element={<CommunityDetailPage />} />
-          </Routes>
-        </AppShell>
-      </Router>
-    </NostrProvider>
+    <ErrorBoundary>
+      <NostrProvider>
+        <Router>
+          <AppShell>
+            <Routes>
+              <Route path="/" element={<Feed />} />
+              <Route path="/post/:postId" element={<PostDetailPage />} />
+              <Route path="/profile/:pubkey" element={<ProfilePage />} />
+              <Route path="/search" element={<SearchPage />} />
+              <Route path="/relays" element={<RelayManagementPage />} />
+              <Route path="/communities" element={<CommunitiesPage />} />
+              <Route path="/community/:pubkey/:communityId" element={<CommunityDetailPage />} />
+            </Routes>
+          </AppShell>
+        </Router>
+      </NostrProvider>
+    </ErrorBoundary>
   );
 }
 

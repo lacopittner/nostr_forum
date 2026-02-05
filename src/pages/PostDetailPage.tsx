@@ -2,8 +2,9 @@ import { useNostr } from "../providers/NostrProvider";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
-import { ArrowLeft, ArrowBigUp, ArrowBigDown, MessageSquare, Send } from "lucide-react";
+import { ArrowLeft, ArrowBigUp, ArrowBigDown, MessageSquare, Send, AlertCircle } from "lucide-react";
 import { CommentThread } from "../components/CommentThread";
+import { useVoting } from "../hooks/useVoting";
 
 interface Comment {
   event: NDKEvent;
@@ -19,51 +20,38 @@ export function PostDetailPage() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [sortBy, setSortBy] = useState<"new" | "top">("new");
+  const [replyError, setReplyError] = useState<string | null>(null);
   
   // Reply state
   const [replyContent, setReplyContent] = useState("");
   const [isPublishing, setIsPublishing] = useState(false);
   
-  // Voting state
-  const [reactions, setReactions] = useState<Record<string, number>>({});
-  const [userVotes, setUserVotes] = useState<Record<string, "UPVOTE" | "DOWNVOTE" | null>>({});
-  const [votingIds, setVotingIds] = useState<Set<string>>(new Set());
+  // Voting - use the custom hook instead of duplicating logic
+  const { reactions, userVotes, votingIds, error: votingError, handleReaction, processIncomingReaction, processIncomingDeletion } = useVoting();
+  
+  // Profile fetching
   const [profiles, setProfiles] = useState<Record<string, any>>({});
+  const profileFetchQueue = useRef(new Set<string>());
   
   const seenEventIds = useRef(new Set<string>());
-  const reactionMap = useRef<Record<string, Record<string, { id: string; content: string; created_at: number }>>>({});
-  const votingLock = useRef(new Set<string>());
   const commentsMap = useRef(new Map<string, NDKEvent>());
 
   const fetchProfile = useCallback(async (pubkey: string) => {
-    if (profiles[pubkey]) return;
+    if (profiles[pubkey] || profileFetchQueue.current.has(pubkey)) return;
+    profileFetchQueue.current.add(pubkey);
+    
     try {
       const profile = await ndk.getUser({ pubkey }).fetchProfile();
       if (profile) {
         setProfiles(prev => ({ ...prev, [pubkey]: profile }));
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error("Failed to fetch profile:", pubkey, e);
+      // Silently fail - user pubkey will be displayed instead
+    }
   }, [ndk, profiles]);
 
-  const updateScores = useCallback(() => {
-    const newScores: Record<string, number> = {};
-    const newUserVotes: Record<string, "UPVOTE" | "DOWNVOTE" | null> = {};
 
-    for (const [id, users] of Object.entries(reactionMap.current)) {
-      let score = 0;
-      for (const [pubkey, reaction] of Object.entries(users)) {
-        if (reaction.content === "NEUTRAL") continue;
-        const isDown = reaction.content === "DOWNVOTE" || reaction.content === "-";
-        score += isDown ? -1 : 1;
-        if (user && pubkey === user.pubkey) {
-          newUserVotes[id] = isDown ? "DOWNVOTE" : "UPVOTE";
-        }
-      }
-      newScores[id] = score;
-    }
-    setReactions(newScores);
-    setUserVotes(newUserVotes);
-  }, [user?.pubkey]);
 
   // Fetch post
   useEffect(() => {
@@ -109,16 +97,15 @@ export function PostDetailPage() {
         { kinds: [NDKKind.Reaction], "#e": [event.id] },
         { closeOnEose: true }
       ).on("event", (reactionEvent: NDKEvent) => {
-        if (!reactionMap.current[event.id]) reactionMap.current[event.id] = {};
-        const existing = reactionMap.current[event.id][reactionEvent.pubkey];
-        if (!existing || reactionEvent.created_at! > existing.created_at) {
-          reactionMap.current[event.id][reactionEvent.pubkey] = {
-            id: reactionEvent.id,
-            content: reactionEvent.content,
-            created_at: reactionEvent.created_at!
-          };
-          updateScores();
-        }
+        processIncomingReaction(reactionEvent);
+      });
+      
+      // Subscribe to deletion events
+      ndk.subscribe(
+        { kinds: [5], "#e": [event.id] },
+        { closeOnEose: true }
+      ).on("event", (deletionEvent: NDKEvent) => {
+        processIncomingDeletion(deletionEvent);
       });
     });
 
@@ -132,22 +119,13 @@ export function PostDetailPage() {
       { kinds: [NDKKind.Reaction], "#e": [postId] },
       { closeOnEose: true }
     ).on("event", (event: NDKEvent) => {
-      if (!reactionMap.current[postId]) reactionMap.current[postId] = {};
-      const existing = reactionMap.current[postId][event.pubkey];
-      if (!existing || event.created_at! > existing.created_at) {
-        reactionMap.current[postId][event.pubkey] = {
-          id: event.id,
-          content: event.content,
-          created_at: event.created_at!
-        };
-        updateScores();
-      }
+      processIncomingReaction(event);
     });
 
     return () => {
       commentSub.stop();
     };
-  }, [ndk, postId, fetchProfile, updateScores]);
+  }, [ndk, postId, fetchProfile, processIncomingReaction, processIncomingDeletion]);
 
   const buildCommentTree = () => {
     const commentList = Array.from(commentsMap.current.values());
@@ -210,6 +188,8 @@ export function PostDetailPage() {
     if (!replyText?.trim() || !user || !post || !targetId || !targetPubkey || isPublishing) return;
 
     setIsPublishing(true);
+    setReplyError(null);
+    
     try {
       const event = new NDKEvent(ndk);
       event.kind = NDKKind.Text;
@@ -247,57 +227,19 @@ export function PostDetailPage() {
       const newComment: Comment = { event, replies: [] };
       setComments(prev => [newComment, ...prev]);
     } catch (error) {
-      console.error("Failed to publish reply", error);
+      console.error("Failed to publish reply:", error);
+      setReplyError("Failed to publish reply. Check your relay connection.");
     } finally {
       setIsPublishing(false);
     }
   };
 
-  const handleReaction = async (targetId: string, targetPubkey: string, type: "UPVOTE" | "DOWNVOTE") => {
-    if (!user || votingLock.current.has(targetId)) return;
-
-    const lastReaction = reactionMap.current[targetId]?.[user.pubkey];
-    const lastContent = lastReaction?.content;
-    const isCurrentlyUp = lastContent === "UPVOTE" || lastContent === "+";
-    const isCurrentlyDown = lastContent === "DOWNVOTE" || lastContent === "-";
-    const isUndoing = (type === "UPVOTE" && isCurrentlyUp) || (type === "DOWNVOTE" && isCurrentlyDown);
-
-    votingLock.current.add(targetId);
-    setVotingIds(prev => new Set(prev).add(targetId));
-
-    try {
-      if (isUndoing && lastReaction?.id) {
-        const deletion = new NDKEvent(ndk);
-        deletion.kind = 5;
-        deletion.content = "Unvoting";
-        deletion.tags = [["e", lastReaction.id]];
-        await deletion.publish();
-        delete reactionMap.current[targetId][user.pubkey];
-      } else {
-        const reaction = new NDKEvent(ndk);
-        reaction.kind = NDKKind.Reaction;
-        reaction.content = type === "UPVOTE" ? "+" : "-";
-        reaction.tags = [["e", targetId], ["p", targetPubkey]];
-        await reaction.publish();
-        
-        if (!reactionMap.current[targetId]) reactionMap.current[targetId] = {};
-        reactionMap.current[targetId][user.pubkey] = {
-          id: reaction.id,
-          content: reaction.content,
-          created_at: Math.floor(Date.now() / 1000)
-        };
-      }
-      updateScores();
-    } catch (error) {
-      console.error("Reaction failed", error);
-    } finally {
-      votingLock.current.delete(targetId);
-      setVotingIds(prev => {
-        const next = new Set(prev);
-        next.delete(targetId);
-        return next;
-      });
-    }
+  const handleVote = (targetId: string, targetPubkey: string, type: "UPVOTE" | "DOWNVOTE") => {
+    // Create a synthetic NDKEvent for voting
+    const event = new NDKEvent(ndk);
+    event.id = targetId;
+    event.pubkey = targetPubkey;
+    handleReaction(event, type);
   };
 
   const getTotalCommentCount = (commentList: Comment[]): number => {
@@ -347,7 +289,7 @@ export function PostDetailPage() {
           {/* Voting */}
           <div className="w-12 bg-accent/30 flex flex-col items-center py-4 space-y-1 rounded-l-xl">
             <button
-              onClick={() => handleReaction(post.id, post.pubkey, "UPVOTE")}
+              onClick={() => handleVote(post.id, post.pubkey, "UPVOTE")}
               disabled={votingIds.has(post.id)}
               className={`transition-colors ${userVotes[post.id] === "UPVOTE" ? "text-orange-600" : "text-muted-foreground hover:text-orange-600"}`}
             >
@@ -357,7 +299,7 @@ export function PostDetailPage() {
               {reactions[post.id] || 0}
             </span>
             <button
-              onClick={() => handleReaction(post.id, post.pubkey, "DOWNVOTE")}
+              onClick={() => handleVote(post.id, post.pubkey, "DOWNVOTE")}
               disabled={votingIds.has(post.id)}
               className={`transition-colors ${userVotes[post.id] === "DOWNVOTE" ? "text-blue-600" : "text-muted-foreground hover:text-blue-600"}`}
             >
@@ -379,6 +321,12 @@ export function PostDetailPage() {
       {/* Reply Box */}
       {user && (
         <div className="bg-card border rounded-xl p-4 shadow-sm">
+          {replyError && (
+            <div className="mb-3 flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+              <AlertCircle size={16} />
+              <span>{replyError}</span>
+            </div>
+          )}
           <textarea
             value={replyContent}
             onChange={(e) => setReplyContent(e.target.value)}
@@ -400,6 +348,13 @@ export function PostDetailPage() {
 
       {/* Comments Section */}
       <div className="space-y-4">
+        {votingError && (
+          <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+            <AlertCircle size={16} />
+            <span>{votingError}</span>
+          </div>
+        )}
+        
         {/* Header with count and sort */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -435,7 +390,7 @@ export function PostDetailPage() {
                 userVotes={userVotes}
                 votingIds={votingIds}
                 profiles={profiles}
-                onVote={handleReaction}
+                onVote={handleVote}
                 onReply={(parentId, _parentPubkey, content) => {
                   // Handle nested reply
                   console.log("Reply to", parentId, content);
