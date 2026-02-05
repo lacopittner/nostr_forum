@@ -4,6 +4,7 @@ import { useNostr } from "../../providers/NostrProvider";
 import { useNavigate } from "react-router-dom";
 import { NDKEvent } from "@nostr-dev-kit/ndk";
 import { BottomNav } from "./BottomNav";
+import { LoginModal } from "../LoginModal";
 
 interface Community {
   id: string;
@@ -12,11 +13,12 @@ interface Community {
 }
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, login, theme, toggleTheme, ndk } = useNostr();
+  const { user, theme, toggleTheme, ndk } = useNostr();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [myCommunities, setMyCommunities] = useState<Community[]>([]);
   const [scrolled, setScrolled] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   // Track scroll for sticky header effect
   useEffect(() => {
@@ -173,7 +175,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
             </div>
           ) : (
             <button 
-              onClick={login}
+              onClick={() => setShowLoginModal(true)}
               className="flex items-center space-x-1 sm:space-x-2 px-3 sm:px-6 py-2 bg-orange-600 text-white rounded-full text-xs sm:text-sm font-bold hover:bg-orange-700 active:scale-95 transition-all shadow-md shadow-orange-600/20"
             >
               <LogIn size={16} />
@@ -183,6 +185,8 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
           )}
         </div>
       </header>
+
+      <LoginModal isOpen={showLoginModal} onClose={() => setShowLoginModal(false)} />
 
       <div className="flex flex-1 w-full relative">
         {/* Sidebar backdrop for mobile */}

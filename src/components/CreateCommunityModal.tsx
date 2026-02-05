@@ -8,6 +8,9 @@ interface CreateCommunityModalProps {
   exit: () => void;
 }
 
+// Kind 30001 - Categorized People List for community membership
+const COMMUNITY_LIST_KIND = 30001;
+
 export function CreateCommunityModal({ exit }: CreateCommunityModalProps) {
   const { ndk, user } = useNostr();
   const [name, setName] = useState("");
@@ -66,6 +69,40 @@ export function CreateCommunityModal({ exit }: CreateCommunityModalProps) {
       event.tags = tags;
 
       await event.publish();
+      
+      // Auto-follow the community as owner
+      const communityATag = `34550:${user.pubkey}:${communityId}`;
+      
+      // First, fetch existing community list
+      const existingSub = ndk.subscribe(
+        { kinds: [COMMUNITY_LIST_KIND], authors: [user.pubkey], "#d": ["communities"] },
+        { closeOnEose: true }
+      );
+      
+      let existingCommunities: string[] = [];
+      
+      existingSub.on("event", (e: NDKEvent) => {
+        existingCommunities = e.tags
+          .filter(t => t[0] === "a")
+          .map(t => t[1])
+          .filter(atag => atag.startsWith("34550:"));
+      });
+      
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for subscription
+      
+      // Create updated community list
+      const joinEvent = new NDKEvent(ndk);
+      joinEvent.kind = COMMUNITY_LIST_KIND;
+      joinEvent.content = "";
+      joinEvent.tags = [
+        ["d", "communities"],
+        ...existingCommunities.map(atag => ["a", atag]),
+        ["a", communityATag]
+      ];
+      
+      await joinEvent.publish();
+      console.log("Auto-joined community as owner");
+      
       setIsPublishing(false);
       exit();
     } catch (err) {

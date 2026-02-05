@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { NDKEvent } from "@nostr-dev-kit/ndk";
-import { ArrowBigUp, ArrowBigDown, MessageSquare, CornerDownRight } from "lucide-react";
+import { ArrowBigUp, ArrowBigDown, MessageSquare, CornerDownRight, Trash2 } from "lucide-react";
+import { useNostr } from "../providers/NostrProvider";
 
 interface Comment {
   event: NDKEvent;
@@ -15,6 +16,7 @@ interface CommentThreadProps {
   profiles: Record<string, any>;
   onVote: (targetId: string, targetPubkey: string, type: "UPVOTE" | "DOWNVOTE") => void;
   onReply: (parentId: string, parentPubkey: string, content: string) => void;
+  onDelete?: (commentId: string) => void;
   depth: number;
 }
 
@@ -26,8 +28,10 @@ export function CommentThread({
   profiles,
   onVote,
   onReply,
+  onDelete,
   depth
 }: CommentThreadProps) {
+  const { user } = useNostr();
   const [isReplying, setIsReplying] = useState(false);
   const [replyContent, setReplyContent] = useState("");
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -39,12 +43,18 @@ export function CommentThread({
   
   const maxDepth = 6;
   const isDeep = depth >= maxDepth;
+  const isOwner = user?.pubkey === event.pubkey;
   
   const handleReplySubmit = () => {
     if (!replyContent.trim()) return;
     onReply(event.id, event.pubkey, replyContent);
     setReplyContent("");
     setIsReplying(false);
+  };
+
+  const handleDelete = () => {
+    if (!confirm("Are you sure you want to delete this comment?")) return;
+    onDelete?.(event.id);
   };
 
   const formatTimeAgo = (timestamp: number): string => {
@@ -150,6 +160,17 @@ export function CommentThread({
             <MessageSquare size={14} />
             <span>Reply</span>
           </button>
+
+          {/* Delete Button (only for owner) */}
+          {isOwner && onDelete && (
+            <button
+              onClick={handleDelete}
+              className="flex items-center gap-1 text-xs text-gray-400 hover:text-red-500 transition-colors"
+            >
+              <Trash2 size={14} />
+              <span>Delete</span>
+            </button>
+          )}
         </div>
 
         {/* Reply Input */}
@@ -197,6 +218,7 @@ export function CommentThread({
               profiles={profiles}
               onVote={onVote}
               onReply={onReply}
+              onDelete={onDelete}
               depth={depth + 1}
             />
           ))}

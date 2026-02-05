@@ -289,6 +289,35 @@ export function PostDetailPage() {
     }
   };
 
+  const handleDeleteComment = async (commentId: string) => {
+    if (!user) return;
+    
+    try {
+      // Create deletion event (Kind 5)
+      const deletion = new NDKEvent(ndk);
+      deletion.kind = 5;
+      deletion.content = "Deleted by author";
+      deletion.tags = [["e", commentId]];
+      
+      await deletion.publish();
+      
+      // Remove from local state
+      const removeComment = (commentList: Comment[]): Comment[] => {
+        return commentList
+          .filter(c => c.event.id !== commentId)
+          .map(c => ({
+            ...c,
+            replies: removeComment(c.replies)
+          }));
+      };
+      
+      setComments(prev => removeComment(prev));
+    } catch (error) {
+      console.error("Failed to delete comment", error);
+      alert("Failed to delete comment");
+    }
+  };
+
   const getTotalCommentCount = (commentList: Comment[]): number => {
     return commentList.reduce((acc, comment) => {
       return acc + 1 + getTotalCommentCount(comment.replies);
@@ -443,6 +472,7 @@ export function PostDetailPage() {
                 onReply={(parentId, parentPubkey, content) => {
                   handleNestedReply(parentId, parentPubkey, content);
                 }}
+                onDelete={handleDeleteComment}
                 depth={0}
               />
             ))}

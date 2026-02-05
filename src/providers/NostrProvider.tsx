@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import NDK, { NDKUser, NDKRelay, NDKNip07Signer } from "@nostr-dev-kit/ndk";
+import NDK, { NDKUser, NDKRelay, NDKNip07Signer, NDKPrivateKeySigner } from "@nostr-dev-kit/ndk";
 import { ndk } from "../lib/ndk";
 
 interface NostrContextType {
   ndk: NDK;
   user: NDKUser | undefined;
   login: () => Promise<void>;
+  loginWith_nsec: (nsec: string) => Promise<boolean>;
   logout: () => void;
   theme: "light" | "dark";
   toggleTheme: () => void;
@@ -14,6 +15,8 @@ interface NostrContextType {
 }
 
 const NostrContext = createContext<NostrContextType | undefined>(undefined);
+
+const LOGIN_STORAGE_KEY = "nostr_reddit_login";
 
 export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<NDKUser | undefined>(undefined);
@@ -32,6 +35,21 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     root.classList.add(theme);
     localStorage.setItem("theme", theme);
   }, [theme]);
+
+  // Check for saved login on mount
+  useEffect(() => {
+    const savedLogin = localStorage.getItem(LOGIN_STORAGE_KEY);
+    if (savedLogin) {
+      try {
+        const { type, key } = JSON.parse(savedLogin);
+        if (type === "nsec") {
+          loginWith_nsec(key, false);
+        }
+      } catch {
+        console.log("Failed to restore login");
+      }
+    }
+  }, []);
 
   // Connection monitoring - simplified
   useEffect(() => {
@@ -88,6 +106,32 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setUser(user);
   };
 
+  const loginWith_nsec = async (nsec: string, saveToStorage = true): Promise<boolean> => {
+    try {
+      // Create signer from nsec
+      const signer = new NDKPrivateKeySigner(nsec);
+      
+      // Get user
+      const user = await signer.user();
+      
+      if (user) {
+        // Update NDK with the new signer
+        (ndk as any).signer = signer;
+        await doLogin(user);
+        
+        // Save to localStorage for persistence
+        if (saveToStorage) {
+          localStorage.setItem(LOGIN_STORAGE_KEY, JSON.stringify({ type: "nsec", key: nsec }));
+        }
+        
+        return true;
+      }
+    } catch (error) {
+      console.error("Login with nsec failed", error);
+    }
+    return false;
+  };
+
   const login = async () => {
     try {
       // Check if NIP-07 extension is available
@@ -109,6 +153,8 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         // Update NDK with the new signer
         (ndk as any).signer = nip07Signer;
         await doLogin(user);
+        
+        // Note: We don't save NIP-07 login to storage as it requires extension
       }
     } catch (error) {
       console.error("Login failed", error);
@@ -117,6 +163,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   const logout = () => {
+    localStorage.removeItem(LOGIN_STORAGE_KEY);
     setUser(undefined);
   };
 
@@ -125,7 +172,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   return (
-    <NostrContext.Provider value={{ ndk, user, login, logout, theme, toggleTheme, connectionStatus, reconnect }}>
+    <NostrContext.Provider value={{ ndk, user, login, loginWith_nsec, logout, theme, toggleTheme, connectionStatus, reconnect }}>
       {children}
     </NostrContext.Provider>
   );
