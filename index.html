@@ -3,8 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#ea580c" />
+    <meta name="description" content="Nostr Reddit - Decentralized communities on Nostr" />
+    <link rel="manifest" href="/manifest.json" />
     <title>NostrReddit</title>
+    <script>
+      // Inject environment config from Vite env variables
+      window.NOSTR_RELAYS = (import.meta.env?.VITE_NOSTR_RELAYS || "ws://localhost:4433").split(",").filter(Boolean);
+      window.NOSTR_DEV_KEY = import.meta.env?.VITE_DEV_MODE === "true" ? import.meta.env?.VITE_DEV_NSEC : null;
+    </script>
   </head>
   <body>
     <div id="root"></div>

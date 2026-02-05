@@ -242,6 +242,52 @@ export function PostDetailPage() {
     handleReaction(event, type);
   };
 
+  const handleNestedReply = async (parentId: string, parentPubkey: string, content: string) => {
+    if (!content.trim() || !user || !post || !parentId || !parentPubkey) return;
+
+    setIsPublishing(true);
+    setReplyError(null);
+    
+    try {
+      const event = new NDKEvent(ndk);
+      event.kind = NDKKind.Text;
+      event.content = content;
+      
+      // NIP-10 threading
+      event.tags = [
+        ["e", post.id, "", "root"],
+        ["p", post.pubkey],
+        ["e", parentId, "", "reply"],
+        ["p", parentPubkey]
+      ];
+      
+      await event.publish();
+      
+      // Refresh comments to show the new reply
+      const newComment: Comment = { event, replies: [] };
+      setComments(prev => {
+        // Add to the correct parent
+        const updateReplies = (commentList: Comment[]): Comment[] => {
+          return commentList.map(comment => {
+            if (comment.event.id === parentId) {
+              return { ...comment, replies: [...comment.replies, newComment] };
+            }
+            if (comment.replies.length > 0) {
+              return { ...comment, replies: updateReplies(comment.replies) };
+            }
+            return comment;
+          });
+        };
+        return updateReplies(prev);
+      });
+    } catch (error) {
+      console.error("Failed to publish nested reply:", error);
+      setReplyError("Failed to publish reply. Check your relay connection.");
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
   const getTotalCommentCount = (commentList: Comment[]): number => {
     return commentList.reduce((acc, comment) => {
       return acc + 1 + getTotalCommentCount(comment.replies);
@@ -391,9 +437,8 @@ export function PostDetailPage() {
                 votingIds={votingIds}
                 profiles={profiles}
                 onVote={handleVote}
-                onReply={(parentId, _parentPubkey, content) => {
-                  // Handle nested reply
-                  console.log("Reply to", parentId, content);
+                onReply={(parentId, parentPubkey, content) => {
+                  handleNestedReply(parentId, parentPubkey, content);
                 }}
                 depth={0}
               />
