@@ -123,6 +123,15 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
             {theme === "light" ? <Moon size={20} /> : <Sun size={20} />}
           </button>
 
+          {/* Settings/Relays - Always visible */}
+          <button 
+            onClick={() => navigate("/relays")}
+            className="hidden sm:flex p-2 hover:bg-accent rounded-full text-muted-foreground hover:text-foreground transition-colors"
+            aria-label="Relays"
+          >
+            <Settings size={20} />
+          </button>
+
           {user ? (
             <div className="flex items-center space-x-1 sm:space-x-3">
               {/* Search - Mobile icon only */}
@@ -142,15 +151,6 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                 <Bell size={20} />
                 {/* Notification badge - placeholder */}
                 <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-orange-600 rounded-full"></span>
-              </button>
-              
-              {/* Settings/Relays */}
-              <button 
-                onClick={() => navigate("/relays")}
-                className="hidden sm:flex p-2 hover:bg-accent rounded-full text-muted-foreground hover:text-foreground transition-colors"
-                aria-label="Settings"
-              >
-                <Settings size={20} />
               </button>
               
               {/* User profile */}
@@ -219,6 +219,11 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                 label="Communities" 
                 onClick={() => { navigate("/communities"); setSidebarOpen(false); }} 
               />
+              <SidebarItem 
+                icon={<Settings size={20} />} 
+                label="Relays" 
+                onClick={() => { navigate("/relays"); setSidebarOpen(false); }} 
+              />
               
               {user && (
                 <>
@@ -226,11 +231,6 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                     icon={<User size={20} />} 
                     label="Profile" 
                     onClick={() => { navigate(`/profile/${user.pubkey}`); setSidebarOpen(false); }} 
-                  />
-                  <SidebarItem 
-                    icon={<Settings size={20} />} 
-                    label="Relays" 
-                    onClick={() => { navigate("/relays"); setSidebarOpen(false); }} 
                   />
                 </>
               )}

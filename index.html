@@ -8,11 +8,6 @@
     <meta name="description" content="Nostr Reddit - Decentralized communities on Nostr" />
     <link rel="manifest" href="/manifest.json" />
     <title>NostrReddit</title>
-    <script>
-      // Inject environment config from Vite env variables
-      window.NOSTR_RELAYS = (import.meta.env?.VITE_NOSTR_RELAYS || "ws://localhost:4433").split(",").filter(Boolean);
-      window.NOSTR_DEV_KEY = import.meta.env?.VITE_DEV_MODE === "true" ? import.meta.env?.VITE_DEV_NSEC : null;
-    </script>
   </head>
   <body>
     <div id="root"></div>

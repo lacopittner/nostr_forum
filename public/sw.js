@@ -46,6 +46,10 @@ self.addEventListener("fetch", (event) => {
   // Skip WebSocket requests (Nostr relays)
   if (request.url.startsWith("ws://") || request.url.startsWith("wss://")) return;
 
+  // Skip browser extension requests
+  if (request.url.startsWith("chrome-extension://")) return;
+  if (request.url.startsWith("moz-extension://")) return;
+
   // Skip API calls
   if (request.url.includes("/api/")) return;
 

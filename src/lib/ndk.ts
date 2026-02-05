@@ -5,18 +5,21 @@ const DEFAULT_RELAYS = [
   "ws://localhost:4433",
 ];
 
-// Get relay URLs from environment or use defaults
+// Get relay URLs from Vite environment or use defaults
 const getRelayUrls = (): string[] => {
-  if (typeof window !== 'undefined' && window.NOSTR_RELAYS) {
-    return window.NOSTR_RELAYS;
+  // Vite exposes env vars on import.meta.env
+  const envRelays = import.meta.env.VITE_NOSTR_RELAYS;
+  if (envRelays) {
+    return envRelays.split(",").map((r: string) => r.trim()).filter(Boolean);
   }
   return DEFAULT_RELAYS;
 };
 
 // Get dev key from environment (only for development!)
 const getDevKey = (): string | null => {
-  if (typeof window !== 'undefined' && window.NOSTR_DEV_KEY) {
-    return window.NOSTR_DEV_KEY;
+  const devMode = import.meta.env.VITE_DEV_MODE === "true";
+  if (devMode) {
+    return import.meta.env.VITE_DEV_NSEC || null;
   }
   return null;
 };
@@ -48,14 +51,6 @@ class NDKService {
   // Allow resetting instance (for testing or relay changes)
   public static resetInstance(): void {
     NDKService.instance = null as any;
-  }
-}
-
-// Extend Window interface for global config
-declare global {
-  interface Window {
-    NOSTR_RELAYS?: string[];
-    NOSTR_DEV_KEY?: string;
   }
 }
 
