@@ -26,7 +26,7 @@ function Feed() {
   const [replyContent, setReplyContent] = useState("");
   const [profiles, setProfiles] = useState<Record<string, any>>({});
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
-  const [sortBy, setSortBy] = useState<"hot" | "new" | "top">("hot");
+  const [sortBy, setSortBy] = useState<"hot" | "new" | "top">("new");
 
   // Voting - use the custom hook instead of duplicating logic
   const { reactions, userVotes, votingIds, error: votingError, handleReaction, processIncomingReaction, processIncomingDeletion } = useVoting();
