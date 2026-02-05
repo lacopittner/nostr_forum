@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import NDK, { NDKUser, NDKRelay, NDKNip07Signer, NDKPrivateKeySigner } from "@nostr-dev-kit/ndk";
 import { ndk } from "../lib/ndk";
+import { hasEncryptedNsec, getEncryptedNsec, decryptNsec, clearEncryptedNsec } from "../lib/crypto";
+import { PinUnlockModal } from "../components/PinUnlockModal";
 
 interface NostrContextType {
   ndk: NDK;
@@ -16,8 +18,6 @@ interface NostrContextType {
 
 const NostrContext = createContext<NostrContextType | undefined>(undefined);
 
-const LOGIN_STORAGE_KEY = "nostr_reddit_login";
-
 export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<NDKUser | undefined>(undefined);
   const [connectionStatus, setConnectionStatus] = useState<"connecting" | "connected" | "disconnected" | "error">("connecting");
@@ -27,6 +27,10 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
     return "light";
   });
+  
+  // PIN unlock state
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [pinError, setPinError] = useState("");
 
   // Apply theme
   useEffect(() => {
@@ -36,20 +40,35 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     localStorage.setItem("theme", theme);
   }, [theme]);
 
-  // Check for saved login on mount
+  // Check for encrypted nsec on mount
   useEffect(() => {
-    const savedLogin = localStorage.getItem(LOGIN_STORAGE_KEY);
-    if (savedLogin) {
-      try {
-        const { type, key } = JSON.parse(savedLogin);
-        if (type === "nsec") {
-          loginWith_nsec(key, false);
-        }
-      } catch {
-        console.log("Failed to restore login");
+    const checkStoredKey = async () => {
+      if (hasEncryptedNsec()) {
+        setShowPinModal(true);
       }
-    }
+    };
+    
+    checkStoredKey();
   }, []);
+
+  // Handle PIN unlock
+  const handlePinUnlock = async (pin: string) => {
+    const encrypted = getEncryptedNsec();
+    if (!encrypted) return;
+    
+    const nsec = await decryptNsec(encrypted, pin);
+    if (nsec) {
+      const success = await loginWith_nsec(nsec);
+      if (success) {
+        setShowPinModal(false);
+        setPinError("");
+      } else {
+        setPinError("Failed to unlock. Please try again.");
+      }
+    } else {
+      setPinError("Invalid PIN. Please try again.");
+    }
+  };
 
   // Connection monitoring - simplified
   useEffect(() => {
@@ -106,7 +125,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setUser(user);
   };
 
-  const loginWith_nsec = async (nsec: string, saveToStorage = true): Promise<boolean> => {
+  const loginWith_nsec = async (nsec: string): Promise<boolean> => {
     try {
       // Create signer from nsec
       const signer = new NDKPrivateKeySigner(nsec);
@@ -118,11 +137,6 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         // Update NDK with the new signer
         (ndk as any).signer = signer;
         await doLogin(user);
-        
-        // Save to localStorage for persistence
-        if (saveToStorage) {
-          localStorage.setItem(LOGIN_STORAGE_KEY, JSON.stringify({ type: "nsec", key: nsec }));
-        }
         
         return true;
       }
@@ -163,7 +177,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   const logout = () => {
-    localStorage.removeItem(LOGIN_STORAGE_KEY);
+    clearEncryptedNsec();
     setUser(undefined);
   };
 
@@ -174,6 +188,15 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   return (
     <NostrContext.Provider value={{ ndk, user, login, loginWith_nsec, logout, theme, toggleTheme, connectionStatus, reconnect }}>
       {children}
+      <PinUnlockModal
+        isOpen={showPinModal}
+        onClose={() => {
+          setShowPinModal(false);
+          clearEncryptedNsec();
+        }}
+        onUnlock={handlePinUnlock}
+        error={pinError}
+      />
     </NostrContext.Provider>
   );
 };
