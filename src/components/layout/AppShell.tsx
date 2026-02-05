@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { Home, LogIn, Menu, X, Sun, Moon, Search, User, Settings, Bell, Compass } from "lucide-react";
+import { Home, LogIn, Menu, X, Search, User, Settings, Bell, Compass, Palette } from "lucide-react";
 import { useNostr } from "../../providers/NostrProvider";
 import { useNavigate } from "react-router-dom";
 import { NDKEvent } from "@nostr-dev-kit/ndk";
 import { BottomNav } from "./BottomNav";
 import { LoginModal } from "../LoginModal";
+import { ThemeModal } from "../ThemeModal";
 
 interface Community {
   id: string;
@@ -13,12 +14,13 @@ interface Community {
 }
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, theme, toggleTheme, ndk } = useNostr();
+  const { user, ndk } = useNostr();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [myCommunities, setMyCommunities] = useState<Community[]>([]);
   const [scrolled, setScrolled] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showThemeModal, setShowThemeModal] = useState(false);
 
   // Track scroll for sticky header effect
   useEffect(() => {
@@ -78,115 +80,104 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
-      {/* Top Navbar - Improved mobile design */}
-      <header className={`sticky top-0 z-50 flex items-center justify-between px-3 sm:px-4 h-14 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 transition-shadow ${scrolled ? "shadow-sm" : ""}`}>
-        <div className="flex items-center space-x-2 sm:space-x-4">
-          {/* Hamburger menu - hidden on large screens */}
+      {/* Top Navbar - Clean & Modern */}
+      <header className={`sticky top-0 z-50 flex items-center justify-between px-4 h-16 border-b bg-background/80 backdrop-blur-xl transition-shadow ${scrolled ? "shadow-sm" : ""}`}>
+        <div className="flex items-center gap-3">
+          {/* Hamburger menu */}
           <button 
-            className="lg:hidden p-2 -ml-2 hover:bg-accent rounded-md transition-colors"
+            className="lg:hidden p-2 -ml-2 hover:bg-secondary rounded-xl transition-colors"
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            aria-label="Toggle menu"
           >
             {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
           
           {/* Logo */}
           <div 
-            className="flex items-center space-x-2 cursor-pointer group"
+            className="flex items-center gap-2.5 cursor-pointer group"
             onClick={() => navigate("/")}
           >
-            <div className="w-8 h-8 bg-orange-600 rounded-full flex items-center justify-center text-white font-black group-hover:bg-orange-500 transition-colors shrink-0">N</div>
-            <span className="font-bold text-lg tracking-tighter hidden sm:inline">nostr-reddit</span>
-            <span className="font-bold text-lg tracking-tighter sm:hidden">n/r</span>
+            <div className="w-9 h-9 rounded-xl bg-[var(--primary)] flex items-center justify-center text-white font-bold text-lg shadow-sm">
+              N
+            </div>
+            <span className="font-bold text-lg tracking-tight hidden sm:block">NostrReddit</span>
           </div>
         </div>
         
-        {/* Search - Desktop */}
-        <div className="flex-1 max-w-2xl mx-2 sm:mx-4 hidden md:block">
-          <div className="relative group">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-orange-500 transition-colors" size={16} />
+        {/* Search - Clean minimal style */}
+        <div className="flex-1 max-w-xl mx-4 hidden md:block">
+          <div className="relative">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground/50" size={18} />
             <input 
               type="text" 
               placeholder="Search..." 
               onFocus={() => navigate("/search")}
-              className="w-full bg-accent text-accent-foreground border-none rounded-full pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-orange-500 outline-none transition-all placeholder:text-muted-foreground/60 cursor-pointer"
+              className="search-input"
             />
           </div>
         </div>
 
         {/* Right side actions */}
-        <div className="flex items-center space-x-1 sm:space-x-2">
-          {/* Theme toggle */}
+        <div className="flex items-center gap-1">
+          {/* Mobile search */}
           <button 
-            onClick={toggleTheme}
-            className="p-2 hover:bg-accent rounded-full text-muted-foreground hover:text-foreground transition-colors"
-            aria-label="Toggle theme"
+            onClick={() => navigate("/search")}
+            className="md:hidden p-2.5 hover:bg-secondary rounded-xl transition-colors text-muted-foreground"
           >
-            {theme === "light" ? <Moon size={20} /> : <Sun size={20} />}
+            <Search size={20} />
           </button>
 
-          {/* Settings/Relays - Always visible */}
+          {/* Theme picker */}
+          <button 
+            onClick={() => setShowThemeModal(true)}
+            className="p-2.5 hover:bg-secondary rounded-xl transition-colors text-muted-foreground"
+            title="Change appearance"
+          >
+            <Palette size={20} className="text-primary-custom" />
+          </button>
+
+          {/* Settings */}
           <button 
             onClick={() => navigate("/relays")}
-            className="hidden sm:flex p-2 hover:bg-accent rounded-full text-muted-foreground hover:text-foreground transition-colors"
-            aria-label="Relays"
+            className="hidden sm:flex p-2.5 hover:bg-secondary rounded-xl transition-colors text-muted-foreground"
           >
             <Settings size={20} />
           </button>
 
           {user ? (
-            <div className="flex items-center space-x-1 sm:space-x-3">
-              {/* Search - Mobile icon only */}
-              <button 
-                onClick={() => navigate("/search")}
-                className="md:hidden p-2 hover:bg-accent rounded-full text-muted-foreground hover:text-foreground transition-colors"
-                aria-label="Search"
-              >
-                <Search size={20} />
-              </button>
-
+            <div className="flex items-center gap-2 ml-2">
               {/* Notifications */}
-              <button 
-                className="hidden sm:flex p-2 hover:bg-accent rounded-full text-muted-foreground hover:text-foreground transition-colors relative"
-                aria-label="Notifications"
-              >
+              <button className="relative p-2.5 hover:bg-secondary rounded-xl transition-colors text-muted-foreground">
                 <Bell size={20} />
-                {/* Notification badge - placeholder */}
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-orange-600 rounded-full"></span>
+                <span className="absolute top-2 right-2 w-2 h-2 bg-[var(--primary)] rounded-full"></span>
               </button>
               
-              {/* User profile */}
+              {/* User avatar */}
               <button 
                 onClick={() => navigate(`/profile/${user.pubkey}`)}
-                className="flex items-center space-x-2 pl-1 sm:pl-2 border-l hover:bg-accent/50 rounded-lg transition-colors"
+                className="flex items-center gap-2 pl-2 pr-3 py-1.5 hover:bg-secondary rounded-xl transition-colors"
               >
-                <div className="w-8 h-8 bg-orange-600/10 border border-orange-600/20 rounded-full overflow-hidden flex items-center justify-center shrink-0">
-                  {user.profile?.image ? (
-                    <img src={user.profile.image} alt="profile" className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-xs font-bold text-orange-600">{user.profile?.name?.[0].toUpperCase() || "U"}</span>
-                  )}
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-gray-200 to-gray-300 dark:from-gray-700 dark:to-gray-600 flex items-center justify-center text-sm font-medium">
+                  {user.profile?.name?.[0]?.toUpperCase() || "U"}
                 </div>
-                <div className="hidden lg:flex flex-col items-start leading-none">
-                  <span className="text-xs font-bold truncate max-w-[80px]">{user.profile?.name || "Anonymous"}</span>
-                  <span className="text-[10px] text-muted-foreground font-mono">{user.npub.slice(0, 6)}...</span>
-                </div>
+                <span className="hidden lg:block text-sm font-medium">
+                  {user.profile?.name || "User"}
+                </span>
               </button>
             </div>
           ) : (
             <button 
               onClick={() => setShowLoginModal(true)}
-              className="flex items-center space-x-1 sm:space-x-2 px-3 sm:px-6 py-2 bg-orange-600 text-white rounded-full text-xs sm:text-sm font-bold hover:bg-orange-700 active:scale-95 transition-all shadow-md shadow-orange-600/20"
+              className="ml-2 btn-primary"
             >
-              <LogIn size={16} />
+              <LogIn size={18} />
               <span className="hidden sm:inline">Log In</span>
-              <span className="sm:hidden">Login</span>
             </button>
           )}
         </div>
       </header>
 
       <LoginModal isOpen={showLoginModal} onClose={() => setShowLoginModal(false)} />
+      <ThemeModal isOpen={showThemeModal} onClose={() => setShowThemeModal(false)} />
 
       <div className="flex flex-1 w-full relative">
         {/* Sidebar backdrop for mobile */}
