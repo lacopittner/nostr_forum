@@ -15,6 +15,7 @@ import { ZapButton } from "./components/ZapButton";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ConnectionStatus } from "./components/ConnectionStatus";
 import { InfiniteScroll } from "./components/InfiniteScroll";
+import { PostContent } from "./components/PostContent";
 import { useVoting } from "./hooks/useVoting";
 
 function Feed() {
@@ -360,8 +361,8 @@ function Feed() {
                       <span>{new Date(post.created_at! * 1000).toLocaleTimeString()}</span>
                     </div>
                     
-                    <div className="text-sm text-foreground whitespace-pre-wrap leading-relaxed mb-4">
-                      {post.content}
+                    <div className="mb-4">
+                      <PostContent content={post.content} maxLines={8} />
                     </div>
 
                     <div className="flex items-center gap-4">

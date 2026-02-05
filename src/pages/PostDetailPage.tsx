@@ -5,6 +5,7 @@ import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
 import { ArrowLeft, ArrowBigUp, ArrowBigDown, MessageSquare, Send, AlertCircle } from "lucide-react";
 import { CommentThread } from "../components/CommentThread";
 import { useVoting } from "../hooks/useVoting";
+import { PostContent } from "../components/PostContent";
 
 interface Comment {
   event: NDKEvent;
@@ -359,7 +360,9 @@ export function PostDetailPage() {
               <span>•</span>
               <span>{new Date((post.created_at || 0) * 1000).toLocaleString()}</span>
             </div>
-            <p className="text-sm whitespace-pre-wrap">{post.content}</p>
+            <div className="mb-2">
+              <PostContent content={post.content} />
+            </div>
           </div>
         </div>
       </div>
