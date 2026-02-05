@@ -184,7 +184,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
         </div>
       </header>
 
-      <div className="flex flex-1 max-w-7xl mx-auto w-full relative">
+      <div className="flex flex-1 w-full relative">
         {/* Sidebar backdrop for mobile */}
         {sidebarOpen && (
           <div 
@@ -193,7 +193,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
           />
         )}
 
-        {/* Left Sidebar */}
+        {/* Left Sidebar - Fixed width on desktop */}
         <aside className={`
           fixed lg:static inset-y-0 left-0 w-64 bg-background z-50 transform lg:translate-x-0 transition-transform duration-300 ease-in-out border-r
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
@@ -277,15 +277,15 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
           </div>
         </aside>
 
-        {/* Main Content - with bottom padding on mobile for nav */}
-        <main className="flex-1 min-w-0 p-3 sm:p-4 md:p-6 pb-20 md:pb-6">
-          <div className="max-w-4xl mx-auto">
+        {/* Main Content - Full width on desktop, wider posts */}
+        <main className="flex-1 min-w-0 p-3 sm:p-4 lg:p-6 pb-20 lg:pb-6">
+          <div className="max-w-none lg:max-w-6xl mx-auto">
             {children}
           </div>
         </main>
 
-        {/* Right Sidebar - Desktop only */}
-        <aside className="w-80 hidden xl:block p-6 space-y-6">
+        {/* Right Sidebar - Desktop only, wider */}
+        <aside className="w-80 hidden xl:block p-6 space-y-6 flex-shrink-0">
           <TrendingCommunities />
           <NostrGuide />
         </aside>

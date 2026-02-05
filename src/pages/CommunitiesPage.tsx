@@ -2,7 +2,7 @@ import { useNostr } from "../providers/NostrProvider";
 import { useEffect, useState } from "react";
 import { NDKEvent } from "@nostr-dev-kit/ndk";
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, UserPlus, UserCheck } from "lucide-react";
+import { Plus, Search, UserPlus, UserCheck, Beaker } from "lucide-react";
 import { CreateCommunityModal } from "../components/CreateCommunityModal";
 import { useCommunityMembership } from "../hooks/useCommunityMembership";
 
@@ -76,6 +76,52 @@ export function CommunitiesPage() {
     navigate(`/community/${community.pubkey}/${d}`);
   };
 
+  const createTestingCommunity = async () => {
+    if (!user) {
+      alert("Please log in first to create a community");
+      return;
+    }
+
+    try {
+      const communityId = "testing_community";
+      
+      const event = new NDKEvent(ndk);
+      event.kind = 34550; // NIP-72 Community
+      event.content = "A testing community for trying out features";
+      
+      event.tags = [
+        ["d", communityId],
+        ["name", "Testing Community"],
+        ["description", "A community for testing NostrReddit features. Feel free to post test content here!"],
+        ["image", ""],
+        ["rules", "1. Be respectful\n2. Test freely\n3. Have fun!"],
+        ["p", user.pubkey, "", "moderator"]
+      ];
+
+      await event.publish();
+      alert("Testing community created! Refresh the page to see it.");
+      
+      // Refresh communities
+      const subscription = ndk.subscribe(
+        { kinds: [34550] as any, limit: 100 },
+        { closeOnEose: true }
+      );
+
+      const communityList: NDKEvent[] = [];
+      
+      subscription.on("event", (event: NDKEvent) => {
+        communityList.push(event);
+      });
+
+      subscription.on("eose", () => {
+        setCommunities(communityList.sort((a, b) => (b.created_at || 0) - (a.created_at || 0)));
+      });
+    } catch (err) {
+      console.error("Failed to create testing community", err);
+      alert("Failed to create community. Make sure your relay is running.");
+    }
+  };
+
   return (
     <div className="space-y-6">
       {showCreateModal && (
@@ -87,13 +133,24 @@ export function CommunitiesPage() {
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-3xl font-black">Communities</h1>
           {user && (
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="flex items-center space-x-2 px-6 py-2 bg-orange-600 text-white rounded-full font-bold text-sm hover:bg-orange-700 transition-all"
-            >
-              <Plus size={16} />
-              <span>New Community</span>
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={createTestingCommunity}
+                className="flex items-center space-x-2 px-4 py-2 bg-accent text-foreground border border-orange-600/30 rounded-full font-bold text-sm hover:bg-accent/70 transition-all"
+                title="Quick create testing community"
+              >
+                <Beaker size={16} className="text-orange-600" />
+                <span className="hidden sm:inline">Create Test Community</span>
+                <span className="sm:hidden">Test</span>
+              </button>
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="flex items-center space-x-2 px-6 py-2 bg-orange-600 text-white rounded-full font-bold text-sm hover:bg-orange-700 transition-all"
+              >
+                <Plus size={16} />
+                <span>New Community</span>
+              </button>
+            </div>
           )}
         </div>
 

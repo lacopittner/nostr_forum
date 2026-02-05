@@ -209,7 +209,11 @@ export function ProfilePage() {
             </div>
           ) : (
             posts.map((post) => (
-              <div key={post.id} className="bg-card border rounded-xl shadow-sm p-4">
+              <div 
+                key={post.id} 
+                className="bg-card border rounded-xl shadow-sm p-4 hover:border-orange-500/20 transition-all cursor-pointer"
+                onClick={() => navigate(`/post/${post.id}`)}
+              >
                 <div className="flex gap-3">
                   <div className="w-10 flex flex-col items-center space-y-1">
                     <ArrowBigUp size={20} className="text-muted-foreground" />
