@@ -1,0 +1,11 @@
+:root {
+  /* Nostr Forum Config */
+  --nf-primary: 249 115 22; /* orange-500 */
+  --nf-primary-hover: 234 88 12; /* orange-600 */
+}
+
+/* Dark mode is handled by Tailwind dark class */
+.dark {
+  --nf-primary: 249 115 22;
+  --nf-primary-hover: 251 146 60; /* orange-400 */
+}
