@@ -202,21 +202,46 @@ export function PostDetailPage() {
     buildCommentTree();
   }, [sortBy, reactions]);
 
-  const handleReply = async () => {
-    if (!replyContent.trim() || !user || !post || isPublishing) return;
+  const handleReply = async (parentId?: string, parentPubkey?: string, content?: string) => {
+    const replyText = content || replyContent;
+    const targetId = parentId || post?.id;
+    const targetPubkey = parentPubkey || post?.pubkey;
+    
+    if (!replyText?.trim() || !user || !post || !targetId || !targetPubkey || isPublishing) return;
 
     setIsPublishing(true);
     try {
       const event = new NDKEvent(ndk);
       event.kind = NDKKind.Text;
-      event.content = replyContent;
+      event.content = replyText;
+      
+      // NIP-10 threading: always reference root post
+      // NIP-10 compliant threading:
+      // - "root" always references the original post
+      // - "reply" references the immediate parent (for nested replies)
       event.tags = [
-        ["e", post.id, "", "root"],
+        ["e", post.id, "", "root"],  // Root is always the original post
         ["p", post.pubkey]
       ];
       
+      // If replying to a comment (not root), add reply marker
+      if (parentId && parentId !== post.id) {
+        event.tags.push(["e", parentId, "", "reply"]);
+        if (parentPubkey) {
+          // Add p tag for parent author if different from root author
+          const hasParentPubkey = event.tags.some(t => t[0] === "p" && t[1] === parentPubkey);
+          if (!hasParentPubkey) {
+            event.tags.push(["p", parentPubkey]);
+          }
+        }
+      }
+      
       await event.publish();
-      setReplyContent("");
+      
+      if (!content) {
+        // Only clear if it's the main reply box
+        setReplyContent("");
+      }
       
       // Add to comments immediately
       const newComment: Comment = { event, replies: [] };
@@ -362,7 +387,7 @@ export function PostDetailPage() {
           />
           <div className="mt-3 flex justify-end">
             <button
-              onClick={handleReply}
+              onClick={() => handleReply()}  // Call without args for root reply
               disabled={isPublishing || !replyContent.trim()}
               className="flex items-center space-x-2 px-6 py-2 bg-orange-600 text-white rounded-full font-bold text-sm hover:bg-orange-700 disabled:opacity-50 transition-all"
             >

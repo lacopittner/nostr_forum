@@ -47,9 +47,9 @@ You must strictly map Reddit features to these specific Nostr Implementation Pos
 - [x] Voting on community posts
 
 ### Pending Features 📝
-- [ ] Threaded comment display (hierarchical)
-- [ ] User profiles with post history
-- [ ] Advanced search
+- [x] Threaded comment display (hierarchical) ✅ NIP-10 compliant with root/reply markers
+- [x] User profiles with post history ✅
+- [x] Advanced search ✅
 - [ ] Relay management UI
 - [ ] Image/media uploads (NIP-94)
 - [ ] Cross-posting between communities
