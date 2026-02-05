@@ -6,6 +6,7 @@ import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
 import { BrowserRouter as Router, Routes, Route, useNavigate } from "react-router-dom";
 import { ProfilePage } from "./pages/ProfilePage";
 import { SearchPage } from "./pages/SearchPage";
+import { ExplorePage } from "./pages/ExplorePage";
 import { RelayManagementPage } from "./pages/RelayManagementPage";
 import { CommunitiesPage } from "./pages/CommunitiesPage";
 import { CommunityDetailPage } from "./pages/CommunityDetailPage";
@@ -543,6 +544,7 @@ function App() {
             <ToastContainer />
             <Routes>
               <Route path="/" element={<Feed />} />
+              <Route path="/explore" element={<ExplorePage />} />
               <Route path="/post/:postId" element={<PostDetailPage />} />
               <Route path="/profile/:pubkey" element={<ProfilePage />} />
               <Route path="/search" element={<SearchPage />} />

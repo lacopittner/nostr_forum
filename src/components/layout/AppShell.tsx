@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Home, LogIn, Menu, X, Sun, Moon, Search, User, Settings, Bell } from "lucide-react";
+import { Home, LogIn, Menu, X, Sun, Moon, Search, User, Settings, Bell, Compass } from "lucide-react";
 import { useNostr } from "../../providers/NostrProvider";
 import { useNavigate } from "react-router-dom";
 import { NDKEvent } from "@nostr-dev-kit/ndk";
@@ -212,6 +212,11 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                 icon={<Home size={20} />} 
                 label="Home" 
                 onClick={() => { navigate("/"); setSidebarOpen(false); }} 
+              />
+              <SidebarItem 
+                icon={<Compass size={20} />} 
+                label="Explore" 
+                onClick={() => { navigate("/explore"); setSidebarOpen(false); }} 
               />
               <SidebarItem 
                 icon={<Search size={20} />} 
