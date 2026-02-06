@@ -13,8 +13,41 @@ export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
   const [isChecking, setIsChecking] = useState(false);
   const { error: showError } = useToast();
 
+  // Convert various image hosting URLs to direct image links
+  const normalizeImageUrl = (url: string): string => {
+    try {
+      const urlObj = new URL(url);
+      
+      // Imgur: imgur.com/xxx -> i.imgur.com/xxx.jpg
+      if (urlObj.hostname === 'imgur.com' || urlObj.hostname === 'www.imgur.com') {
+        const imageId = urlObj.pathname.replace(/^\//, '').split('/')[0];
+        if (imageId) {
+          return `https://i.imgur.com/${imageId}.jpg`;
+        }
+      }
+      
+      // Imgur already direct link but missing extension
+      if (urlObj.hostname === 'i.imgur.com' && !/\.(jpg|jpeg|png|gif|webp)$/i.test(urlObj.pathname)) {
+        return `${url}.jpg`;
+      }
+      
+      // Gyazo: gyazo.com/xxx -> i.gyazo.com/xxx.png
+      if (urlObj.hostname === 'gyazo.com' || urlObj.hostname === 'www.gyazo.com') {
+        const imageId = urlObj.pathname.replace(/^\//, '').split('/')[0];
+        if (imageId) {
+          return `https://i.gyazo.com/${imageId}.png`;
+        }
+      }
+      
+      return url;
+    } catch {
+      return url;
+    }
+  };
+
   // Validate if URL looks like an image
   const validateUrl = (url: string) => {
+    const normalizedUrl = normalizeImageUrl(url);
     const imageExtensions = /\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)(\?.*)?$/i;
     const imageHosts = [
       "imgur.com",
@@ -34,6 +67,7 @@ export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
       "prnt.sc",
       "prntscr.com",
       "gyazo.com",
+      "i.gyazo.com",
       "puu.sh",
       "imageup.ru",
       "snag.gy",
@@ -47,7 +81,7 @@ export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
     ];
 
     try {
-      const urlObj = new URL(url);
+      const urlObj = new URL(normalizedUrl);
       const hasImageExt = imageExtensions.test(url);
       const isImageHost = imageHosts.some((host) => urlObj.hostname.includes(host));
       const hasImageInPath = urlObj.pathname.includes("/i/") || urlObj.pathname.includes("/img/");
@@ -71,6 +105,9 @@ export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
 
     setIsChecking(true);
 
+    // Normalize URL before validation
+    const normalizedUrl = normalizeImageUrl(imageUrl);
+
     // Basic validation
     if (!validateUrl(imageUrl)) {
       showError("This doesn't look like a valid image URL. Please check the link.");
@@ -84,7 +121,7 @@ export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
         const img = new Image();
         img.onload = () => resolve();
         img.onerror = () => reject(new Error("Failed to load image"));
-        img.src = imageUrl;
+        img.src = normalizedUrl;
         // Timeout after 10 seconds
         setTimeout(() => reject(new Error("Image load timeout")), 10000);
       });
@@ -95,7 +132,7 @@ export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
     }
 
     setIsChecking(false);
-    onImageUploaded(imageUrl);
+    onImageUploaded(normalizedUrl);
   };
 
   // Quick paste handler
@@ -156,7 +193,7 @@ export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
       {imageUrl && isValid && (
         <div className="relative aspect-video bg-accent/30 rounded-lg overflow-hidden">
           <img
-            src={imageUrl}
+            src={normalizeImageUrl(imageUrl)}
             alt="Preview"
             className="w-full h-full object-contain"
             onError={() => {
