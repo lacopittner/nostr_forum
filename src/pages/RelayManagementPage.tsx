@@ -66,6 +66,32 @@ export function RelayManagementPage() {
     relays.forEach(r => checkRelayStatus(r.url));
   };
 
+  const reconnectWithRelays = async (relayUrls: string[]) => {
+    if (relayUrls.length === 0) {
+      ndkInstance.pool.relays.forEach((relay: any) => {
+        relay.disconnect();
+      });
+      (ndkInstance as any).explicitRelayUrls = [];
+      return;
+    }
+
+    setIsConnecting(true);
+
+    try {
+      ndkInstance.pool.relays.forEach((relay: any) => {
+        relay.disconnect();
+      });
+
+      (ndkInstance as any).explicitRelayUrls = relayUrls;
+      await ndkInstance.connect();
+    } catch {
+      // UI status is updated by explicit relay checks below
+    } finally {
+      setIsConnecting(false);
+      relayUrls.forEach(checkRelayStatus);
+    }
+  };
+
   const handleAddRelay = () => {
     if (!newRelayUrl.trim()) return;
 
@@ -90,9 +116,8 @@ export function RelayManagementPage() {
     // Save to localStorage and reinitialize NDK
     const relayUrls = updatedRelays.map(r => r.url);
     saveStoredRelays(relayUrls);
-    
-    // Check connection
-    checkRelayStatus(url);
+
+    void reconnectWithRelays(relayUrls);
     
     setNewRelayUrl("");
   };
@@ -104,44 +129,12 @@ export function RelayManagementPage() {
     // Save to localStorage
     const relayUrls = updatedRelays.map(r => r.url);
     saveStoredRelays(relayUrls);
-    
-    // Reinitialize NDK with new relay list
-    if (relayUrls.length > 0) {
-      setIsConnecting(true);
-      // Disconnect current connections
-      ndkInstance.pool.relays.forEach((relay: any) => {
-        relay.disconnect();
-      });
-      
-      // Update NDK relay list
-      (ndkInstance as any).explicitRelayUrls = relayUrls;
-      
-      // Reconnect
-      ndkInstance.connect().then(() => {
-        setIsConnecting(false);
-        checkAllRelays();
-      }).catch(() => {
-        setIsConnecting(false);
-      });
-    }
+
+    void reconnectWithRelays(relayUrls);
   };
 
   const handleReconnect = () => {
-    setIsConnecting(true);
-    
-    // Disconnect all
-    ndkInstance.pool.relays.forEach((relay: any) => {
-      relay.disconnect();
-    });
-    
-    // Reconnect
-    ndkInstance.connect().then(() => {
-      setIsConnecting(false);
-      checkAllRelays();
-    }).catch(() => {
-      setIsConnecting(false);
-      checkAllRelays();
-    });
+    void reconnectWithRelays(relays.map(r => r.url));
   };
 
   const addDefaultRelays = () => {
@@ -150,15 +143,21 @@ export function RelayManagementPage() {
       "wss://relay.nostr.band",
       "wss://nos.lol",
     ];
-    
-    defaults.forEach(url => {
-      if (!relays.some(r => r.url === url)) {
-        const updatedRelays = [...relays, { url, connected: false, checked: false }];
-        setRelays(updatedRelays);
-        saveStoredRelays(updatedRelays.map(r => r.url));
-        checkRelayStatus(url);
-      }
-    });
+
+    const existing = new Set(relays.map(r => r.url));
+    const urlsToAdd = defaults.filter(url => !existing.has(url));
+
+    if (urlsToAdd.length === 0) return;
+
+    const updatedRelays = [
+      ...relays,
+      ...urlsToAdd.map(url => ({ url, connected: false, checked: false })),
+    ];
+
+    setRelays(updatedRelays);
+    const relayUrls = updatedRelays.map(r => r.url);
+    saveStoredRelays(relayUrls);
+    void reconnectWithRelays(relayUrls);
   };
 
   return (

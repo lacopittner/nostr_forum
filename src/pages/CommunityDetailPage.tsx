@@ -184,42 +184,30 @@ export function CommunityDetailPage() {
   // Handle edit post
   const handleEditPost = async (postId: string, newContent: string) => {
     if (!user) return;
-    
-    try {
-      // Create a new event with the same ID (replacement)
-      const post = posts.find(p => p.id === postId);
-      if (!post) return;
 
-      const event = new NDKEvent(ndk);
-      event.kind = NDKKind.Text;
-      event.content = newContent;
-      event.tags = post.tags;
-      
-      // Add edited tag
-      if (!event.tags.find(t => t[0] === "edited")) {
-        event.tags.push(["edited", new Date().toISOString()]);
-      }
+    const editedAt = new Date().toISOString();
 
-      await event.publish();
-      
-      // Update local state - only update content, keep the rest of the event
-      setPosts(prev => prev.map(p => {
-        if (p.id === postId) {
-          // Create a new event with updated content
-          const updatedEvent = new NDKEvent(ndk);
-          updatedEvent.kind = p.kind;
-          updatedEvent.content = newContent;
-          updatedEvent.tags = [...p.tags];
-          updatedEvent.created_at = p.created_at;
-          return updatedEvent;
-        }
-        return p;
-      }));
-      setEditedPosts(prev => new Set(prev).add(postId));
-    } catch (error) {
-      logger.error("Failed to edit post", error); showError("Failed to edit post. Please try again.");
-      alert("Failed to edit post");
-    }
+    const applyLocalEdit = (event: NDKEvent): NDKEvent => {
+      // Keep original ID/event identity in local timeline; kind:1 is not replaceable on relays.
+      const updatedEvent = Object.assign(
+        Object.create(Object.getPrototypeOf(event)),
+        event
+      ) as NDKEvent;
+
+      updatedEvent.content = newContent;
+      const tagsWithoutEdited = event.tags.filter(t => t[0] !== "edited");
+      updatedEvent.tags = [...tagsWithoutEdited, ["edited", editedAt]];
+
+      return updatedEvent;
+    };
+
+    setPosts(prev =>
+      prev.map(p => (p.id === postId ? applyLocalEdit(p) : p))
+    );
+    setFilteredPosts(prev =>
+      prev.map(p => (p.id === postId ? applyLocalEdit(p) : p))
+    );
+    setEditedPosts(prev => new Set(prev).add(postId));
   };
 
   // Handle delete post

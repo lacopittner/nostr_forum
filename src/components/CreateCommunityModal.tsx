@@ -86,22 +86,26 @@ export function CreateCommunityModal({ exit }: CreateCommunityModalProps) {
       // Auto-follow the community as owner
       const communityATag = `34550:${user.pubkey}:${communityId}`;
       
-      // First, fetch existing community list
-      const existingSub = ndk.subscribe(
+      // Fetch latest existing community list event (if present)
+      const existingEvents = await ndk.fetchEvents(
         { kinds: [COMMUNITY_LIST_KIND], authors: [user.pubkey], "#d": ["communities"] },
         { closeOnEose: true }
       );
-      
-      let existingCommunities: string[] = [];
-      
-      existingSub.on("event", (e: NDKEvent) => {
-        existingCommunities = e.tags
-          .filter(t => t[0] === "a")
-          .map(t => t[1])
-          .filter(atag => atag.startsWith("34550:"));
-      });
-      
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for subscription
+
+      const latestListEvent = Array.from(existingEvents).sort(
+        (a, b) => (b.created_at || 0) - (a.created_at || 0)
+      )[0];
+
+      const existingCommunities = latestListEvent
+        ? latestListEvent.tags
+            .filter(t => t[0] === "a")
+            .map(t => t[1])
+            .filter(atag => atag.startsWith("34550:"))
+        : [];
+
+      const mergedCommunities = Array.from(
+        new Set([...existingCommunities, communityATag])
+      );
       
       // Create updated community list
       const joinEvent = new NDKEvent(ndk);
@@ -109,8 +113,7 @@ export function CreateCommunityModal({ exit }: CreateCommunityModalProps) {
       joinEvent.content = "";
       joinEvent.tags = [
         ["d", "communities"],
-        ...existingCommunities.map(atag => ["a", atag]),
-        ["a", communityATag]
+        ...mergedCommunities.map(atag => ["a", atag])
       ];
       
       await joinEvent.publish();

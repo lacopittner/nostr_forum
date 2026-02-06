@@ -38,7 +38,7 @@ function Feed() {
   const [postActionMenuOpen, setPostActionMenuOpen] = useState<string | null>(null);
   const actionMenuRef = useRef<HTMLDivElement>(null);
   const [profiles, setProfiles] = useState<Record<string, NDKProfile>>({});
-  const [commentCounts] = useState<Record<string, number>>({});
+  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
   const [sortBy, setSortBy] = useState<"hot" | "new" | "top">("new");
   const [feedFilter, setFeedFilter] = useState<"all" | "following">("all");
   
@@ -128,7 +128,8 @@ function Feed() {
   const { isPulling, pullDistance, isRefreshing } = usePullToRefresh(async () => {
     seenEventIds.current.clear();
     setUntil(undefined);
-    await loadPosts();
+    setHasMore(true);
+    await loadPosts(false, feedFilter);
   });
   
   // Infinite scroll state
@@ -145,9 +146,15 @@ function Feed() {
 
   const seenEventIds = useRef(new Set<string>());
   const profileFetchQueue = useRef(new Set<string>());
+  const profilesRef = useRef<Record<string, NDKProfile>>({});
+  const commentCountFetchQueue = useRef(new Set<string>());
+
+  useEffect(() => {
+    profilesRef.current = profiles;
+  }, [profiles]);
 
   const fetchProfile = useCallback(async (pubkey: string) => {
-    if (profiles[pubkey] || profileFetchQueue.current.has(pubkey)) return;
+    if (profilesRef.current[pubkey] || profileFetchQueue.current.has(pubkey)) return;
     profileFetchQueue.current.add(pubkey);
 
     try {
@@ -157,8 +164,32 @@ function Feed() {
       }
     } catch (e) {
       logger.error("Failed to fetch profile:", pubkey, e);
+    } finally {
+      profileFetchQueue.current.delete(pubkey);
     }
-  }, [ndk, profiles]);
+  }, [ndk]);
+
+  const fetchCommentCount = useCallback(async (postId: string) => {
+    if (commentCountFetchQueue.current.has(postId)) return;
+    commentCountFetchQueue.current.add(postId);
+
+    try {
+      const comments = await ndk.fetchEvents(
+        {
+          kinds: [NDKKind.Text],
+          "#e": [postId],
+          limit: 500,
+        },
+        { closeOnEose: true }
+      );
+
+      setCommentCounts(prev => ({ ...prev, [postId]: comments.size }));
+    } catch (error) {
+      logger.error("Failed to fetch comment count:", postId, error);
+    } finally {
+      commentCountFetchQueue.current.delete(postId);
+    }
+  }, [ndk]);
 
   // Initial fetch
   useEffect(() => {
@@ -184,12 +215,13 @@ function Feed() {
       });
 
       subscribeToReactions(event.id);
+      fetchCommentCount(event.id);
     });
 
     return () => {
       postSub.stop();
     };
-  }, [ndk, sortBy]);
+  }, [ndk, sortBy, fetchProfile, fetchCommentCount]);
 
   const subscribeToReactions = (postId: string) => {
     ndk.subscribe(
@@ -209,7 +241,10 @@ function Feed() {
     });
   };
 
-  const loadPosts = async (loadMore = false) => {
+  const loadPosts = async (
+    loadMore = false,
+    selectedFeedFilter: "all" | "following" = feedFilter
+  ) => {
     if (loadMore) {
       setIsLoadingMore(true);
     }
@@ -221,7 +256,15 @@ function Feed() {
       };
       
       // Filter by following if selected
-      if (feedFilter === "following" && following.size > 0) {
+      if (selectedFeedFilter === "following") {
+        if (following.size === 0) {
+          if (!loadMore) {
+            setPosts([]);
+          }
+          setHasMore(false);
+          return;
+        }
+
         filter.authors = Array.from(following);
       }
       
@@ -247,6 +290,7 @@ function Feed() {
         uniqueEvents.forEach(event => {
           fetchProfile(event.pubkey);
           subscribeToReactions(event.id);
+          fetchCommentCount(event.id);
         });
         
         setPosts(prev => {
@@ -262,6 +306,16 @@ function Feed() {
     } finally {
       setIsLoadingMore(false);
     }
+  };
+
+  const resetFeedAndLoad = (nextFilter: "all" | "following") => {
+    setFeedFilter(nextFilter);
+    setPosts([]);
+    setCommentCounts({});
+    seenEventIds.current.clear();
+    setUntil(undefined);
+    setHasMore(true);
+    loadPosts(false, nextFilter);
   };
 
   const loadMore = () => {
@@ -333,6 +387,7 @@ function Feed() {
       await event.publish();
       setReplyContent("");
       setReplyingTo(null);
+      setCommentCounts(prev => ({ ...prev, [post.id]: (prev[post.id] || 0) + 1 }));
     } catch (error) {
       logger.error("Failed to publish reply", error);
       showError("Failed to publish reply. Please try again.");
@@ -351,7 +406,8 @@ function Feed() {
             // Refresh posts after creating
             seenEventIds.current.clear();
             setUntil(undefined);
-            loadPosts();
+            setHasMore(true);
+            loadPosts(false, feedFilter);
           }}
         />
       )}
@@ -402,13 +458,7 @@ function Feed() {
                   <span className="text-sm font-bold text-gray-400">Feed:</span>
                   <div className="flex items-center gap-1">
                     <button
-                      onClick={() => {
-                        setFeedFilter("all");
-                        setPosts([]);
-                        seenEventIds.current.clear();
-                        setUntil(undefined);
-                        loadPosts();
-                      }}
+                      onClick={() => resetFeedAndLoad("all")}
                       className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${
                         feedFilter === "all"
                           ? "bg-[var(--primary)] text-white"
@@ -418,13 +468,7 @@ function Feed() {
                       All
                     </button>
                     <button
-                      onClick={() => {
-                        setFeedFilter("following");
-                        setPosts([]);
-                        seenEventIds.current.clear();
-                        setUntil(undefined);
-                        loadPosts();
-                      }}
+                      onClick={() => resetFeedAndLoad("following")}
                       className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${
                         feedFilter === "following"
                           ? "bg-[var(--primary)] text-white"

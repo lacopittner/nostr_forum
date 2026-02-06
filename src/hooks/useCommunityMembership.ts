@@ -28,18 +28,24 @@ export function useCommunityMembership() {
       { closeOnEose: true }
     );
 
-    const communities = new Set<string>();
+    let latestEvent: NDKEvent | null = null;
 
     sub.on("event", (event: NDKEvent) => {
-      // Extract community identifiers from 'a' tags
-      event.tags.forEach(tag => {
+      const createdAt = event.created_at || 0;
+      if (!latestEvent || createdAt > (latestEvent.created_at || 0)) {
+        latestEvent = event;
+      }
+    });
+
+    sub.on("eose", () => {
+      const communities = new Set<string>();
+
+      latestEvent?.tags.forEach(tag => {
         if (tag[0] === "a" && tag[1].startsWith("34550:")) {
           communities.add(tag[1]);
         }
       });
-    });
 
-    sub.on("eose", () => {
       setJoinedCommunities(communities);
       setIsLoading(false);
     });
