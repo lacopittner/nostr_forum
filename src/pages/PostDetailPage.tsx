@@ -464,73 +464,26 @@ export function PostDetailPage() {
           </div>
 
           <div className="p-4 flex-1">
-            <div className="flex items-center gap-2 text-xs text-gray-400 mb-2">
-              <span className="font-mono">{post.pubkey.slice(0, 12)}...</span>
+            {/* Post header - metadata with links */}
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2 flex-wrap">
+              {/* Community link */}
+              <button 
+                onClick={() => navigate('/communities')}
+                className="font-bold text-foreground/80 hover:underline hover:text-[var(--primary)]"
+              >
+                r/nostr
+              </button>
+              <span>•</span>
+              <span>Posted by</span>
+              {/* Author link */}
+              <button 
+                onClick={() => navigate(`/profile/${post.pubkey}`)}
+                className="hover:underline hover:text-[var(--primary)] text-foreground/60"
+              >
+                {profiles[post.pubkey]?.displayName || profiles[post.pubkey]?.name || `${post.pubkey.slice(0, 8)}...`}
+              </button>
               <span>•</span>
               <span>{new Date((post.created_at || 0) * 1000).toLocaleString()}</span>
-              
-              {/* Actions menu */}
-              <div className="relative ml-auto" ref={actionsMenuRef}>
-                <button
-                  onClick={() => setShowActionsMenu(!showActionsMenu)}
-                  className="p-1.5 hover:bg-accent rounded-full transition-colors"
-                >
-                  <MoreHorizontal size={16} />
-                </button>
-                
-                {showActionsMenu && (
-                  <div className="absolute right-0 top-full mt-1 w-40 bg-card border rounded-lg shadow-lg z-10 py-1">
-                    {isOwnPost ? (
-                      <>
-                        <button
-                          onClick={() => {
-                            setIsEditing(true);
-                            setEditContent(post.content);
-                            setShowActionsMenu(false);
-                          }}
-                          className="w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
-                        >
-                          <Edit3 size={14} />
-                          Edit Post
-                        </button>
-                        <button
-                          onClick={() => {
-                            handleDeletePost();
-                            setShowActionsMenu(false);
-                          }}
-                          className="w-full px-4 py-2 text-left text-sm hover:bg-accent text-red-500 flex items-center gap-2"
-                        >
-                          <Trash2 size={14} />
-                          Delete Post
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(window.location.href);
-                            success("Link copied to clipboard");
-                            setShowActionsMenu(false);
-                          }}
-                          className="w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
-                        >
-                          <Share2 size={14} />
-                          Share Post
-                        </button>
-                        <button
-                          onClick={() => {
-                            alert("Report feature coming soon");
-                            setShowActionsMenu(false);
-                          }}
-                          className="w-full px-4 py-2 text-left text-sm hover:bg-accent text-muted-foreground"
-                        >
-                          Report Post
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
             </div>
             
             {/* Edit mode */}
@@ -570,7 +523,13 @@ export function PostDetailPage() {
                     <span>{totalComments} comments</span>
                   </div>
                   
-                  <button className="flex items-center gap-1.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground hover:text-foreground text-xs font-bold">
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(window.location.href);
+                      success("Link copied to clipboard");
+                    }}
+                    className="flex items-center gap-1.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground hover:text-foreground text-xs font-bold"
+                  >
                     <Share2 size={16} />
                     <span>Share</span>
                   </button>
@@ -586,6 +545,69 @@ export function PostDetailPage() {
                       size="sm"
                       showText={true}
                     />
+                  </div>
+                  
+                  {/* 3-dot menu moved to bottom right */}
+                  <div className="relative ml-auto" ref={actionsMenuRef}>
+                    <button
+                      onClick={() => setShowActionsMenu(!showActionsMenu)}
+                      className="p-1.5 hover:bg-accent rounded-full transition-colors text-muted-foreground"
+                    >
+                      <MoreHorizontal size={16} />
+                    </button>
+                    
+                    {showActionsMenu && (
+                      <div className="absolute right-0 bottom-full mb-1 w-40 bg-card border rounded-lg shadow-lg z-10 py-1">
+                        {isOwnPost ? (
+                          <>
+                            <button
+                              onClick={() => {
+                                setIsEditing(true);
+                                setEditContent(post.content);
+                                setShowActionsMenu(false);
+                              }}
+                              className="w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
+                            >
+                              <Edit3 size={14} />
+                              Edit Post
+                            </button>
+                            <button
+                              onClick={() => {
+                                handleDeletePost();
+                                setShowActionsMenu(false);
+                              }}
+                              className="w-full px-4 py-2 text-left text-sm hover:bg-accent text-red-500 flex items-center gap-2"
+                            >
+                              <Trash2 size={14} />
+                              Delete Post
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(window.location.href);
+                                success("Link copied to clipboard");
+                                setShowActionsMenu(false);
+                              }}
+                              className="w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
+                            >
+                              <Share2 size={14} />
+                              Share Post
+                            </button>
+                            <button
+                              onClick={() => {
+                                alert("Report feature coming soon");
+                                setShowActionsMenu(false);
+                              }}
+                              className="w-full px-4 py-2 text-left text-sm hover:bg-accent text-muted-foreground"
+                            >
+                              Report Post
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </>
