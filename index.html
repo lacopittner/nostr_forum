@@ -8,6 +8,36 @@
     <meta name="description" content="Nostr Reddit - Decentralized communities on Nostr" />
     <!-- Content Security Policy -->
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https: http:; media-src 'self' https:; connect-src 'self' ws: wss: https:; frame-src https://www.youtube.com https://www.youtube-nocookie.com; worker-src 'self' blob:;">
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem("nostr-reddit-theme");
+          var mode = "system";
+
+          if (raw) {
+            var parsed = JSON.parse(raw);
+            if (parsed && (parsed.mode === "light" || parsed.mode === "dark" || parsed.mode === "system")) {
+              mode = parsed.mode;
+            }
+          } else {
+            var legacy = localStorage.getItem("theme");
+            if (legacy === "light" || legacy === "dark") {
+              mode = legacy;
+            }
+          }
+
+          var effectiveMode = mode === "system"
+            ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+            : mode;
+
+          var root = document.documentElement;
+          root.classList.remove("light", "dark");
+          root.classList.add(effectiveMode);
+        } catch (_error) {
+          document.documentElement.classList.add("light");
+        }
+      })();
+    </script>
     <link rel="manifest" href="/manifest.json" />
     <title>NostrReddit</title>
   </head>

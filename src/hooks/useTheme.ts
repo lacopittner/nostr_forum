@@ -27,45 +27,74 @@ export const ACCENT_COLORS = {
 type AccentColorKey = keyof typeof ACCENT_COLORS;
 
 const STORAGE_KEY = "nostr-reddit-theme";
+const LEGACY_STORAGE_KEY = "theme";
+const DEFAULT_MODE: ThemeMode = "system";
+const DEFAULT_ACCENT: AccentColorKey = "orange";
+
+function isThemeMode(value: unknown): value is ThemeMode {
+  return value === "light" || value === "dark" || value === "system";
+}
+
+function isAccentColorKey(value: unknown): value is AccentColorKey {
+  return typeof value === "string" && value in ACCENT_COLORS;
+}
+
+function generateColors(accent: string): ThemeColors {
+  const colorDef = ACCENT_COLORS[accent as AccentColorKey] || ACCENT_COLORS.orange;
+  return {
+    primary: `hsl(${colorDef.hue} 85% 50%)`,
+    primaryForeground: "white",
+  };
+}
+
+function readStoredTheme(): { mode: ThemeMode; accentColor: AccentColorKey } {
+  if (typeof window === "undefined") {
+    return { mode: DEFAULT_MODE, accentColor: DEFAULT_ACCENT };
+  }
+
+  let mode: ThemeMode = DEFAULT_MODE;
+  let accentColor: AccentColorKey = DEFAULT_ACCENT;
+
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (isThemeMode(parsed?.mode)) {
+        mode = parsed.mode;
+      }
+      if (isAccentColorKey(parsed?.accentColor)) {
+        accentColor = parsed.accentColor;
+      }
+      return { mode, accentColor };
+    }
+  } catch {
+    // Fallback to legacy storage below
+  }
+
+  const legacyMode = localStorage.getItem(LEGACY_STORAGE_KEY);
+  if (legacyMode === "light" || legacyMode === "dark") {
+    mode = legacyMode;
+  }
+
+  return { mode, accentColor };
+}
+
+function resolveEffectiveMode(mode: ThemeMode): "light" | "dark" {
+  if (mode === "system") {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  return mode;
+}
 
 export function useTheme() {
   const [theme, setThemeState] = useState<ThemeState>(() => {
-    if (typeof window === "undefined") {
-      return {
-        mode: "system",
-        accentColor: "orange",
-        colors: { primary: "hsl(24 95% 53%)", primaryForeground: "white" },
-      };
-    }
-
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        return {
-          mode: parsed.mode || "system",
-          accentColor: parsed.accentColor || "orange",
-          colors: generateColors(parsed.accentColor || "orange"),
-        };
-      } catch {
-        // fallback
-      }
-    }
-
+    const stored = readStoredTheme();
     return {
-      mode: "system",
-      accentColor: "orange",
-      colors: generateColors("orange"),
+      mode: stored.mode,
+      accentColor: stored.accentColor,
+      colors: generateColors(stored.accentColor),
     };
   });
-
-  function generateColors(accent: string): ThemeColors {
-    const colorDef = ACCENT_COLORS[accent as AccentColorKey] || ACCENT_COLORS.orange;
-    return {
-      primary: `hsl(${colorDef.hue} 85% 50%)`,
-      primaryForeground: "white",
-    };
-  }
 
   const applyTheme = useCallback((newTheme: ThemeState) => {
     const root = document.documentElement;
@@ -73,11 +102,9 @@ export function useTheme() {
     // Apply mode
     root.classList.remove("light", "dark");
     
-    let effectiveMode = newTheme.mode;
-    if (effectiveMode === "system") {
-      effectiveMode = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    }
+    const effectiveMode = resolveEffectiveMode(newTheme.mode);
     root.classList.add(effectiveMode);
+    localStorage.setItem(LEGACY_STORAGE_KEY, effectiveMode);
 
     // Apply accent color
     const colorDef = ACCENT_COLORS[newTheme.accentColor as AccentColorKey] || ACCENT_COLORS.orange;
@@ -98,11 +125,49 @@ export function useTheme() {
 
   useEffect(() => {
     applyTheme(theme);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    const payload = {
       mode: theme.mode,
       accentColor: theme.accentColor,
-    }));
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    window.dispatchEvent(new CustomEvent("nostr-theme-changed", { detail: payload }));
   }, [theme, applyTheme]);
+
+  // Keep multiple hook instances in sync (e.g., app shell + modal)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const syncFromStorage = () => {
+      const stored = readStoredTheme();
+      setThemeState((prev) => {
+        if (prev.mode === stored.mode && prev.accentColor === stored.accentColor) {
+          return prev;
+        }
+        return {
+          mode: stored.mode,
+          accentColor: stored.accentColor,
+          colors: generateColors(stored.accentColor),
+        };
+      });
+    };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key && event.key !== STORAGE_KEY && event.key !== LEGACY_STORAGE_KEY) return;
+      syncFromStorage();
+    };
+
+    const handleThemeChanged = () => {
+      syncFromStorage();
+    };
+
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("nostr-theme-changed", handleThemeChanged as EventListener);
+
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("nostr-theme-changed", handleThemeChanged as EventListener);
+    };
+  }, []);
 
   // Listen for system theme changes
   useEffect(() => {

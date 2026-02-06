@@ -6,6 +6,7 @@ import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
 import { BottomNav } from "./BottomNav";
 import { LoginModal } from "../LoginModal";
 import { ThemeModal } from "../ThemeModal";
+import { useTheme } from "../../hooks/useTheme";
 import { useCommunityMembership } from "../../hooks/useCommunityMembership";
 import { logger } from "../../lib/logger";
 
@@ -27,6 +28,7 @@ interface TrendingCommunity extends Community {
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, ndk } = useNostr();
   const navigate = useNavigate();
+  useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [myCommunities, setMyCommunities] = useState<Community[]>([]);
   const [scrolled, setScrolled] = useState(false);

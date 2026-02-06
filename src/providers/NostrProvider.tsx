@@ -17,28 +17,69 @@ interface NostrContextType {
 }
 
 const NostrContext = createContext<NostrContextType | undefined>(undefined);
+const THEME_STORAGE_KEY = "nostr-reddit-theme";
+
+function getInitialTheme(): "light" | "dark" {
+  if (typeof window === "undefined") return "light";
+
+  const root = window.document.documentElement;
+  if (root.classList.contains("dark")) return "dark";
+  if (root.classList.contains("light")) return "light";
+
+  try {
+    const saved = localStorage.getItem(THEME_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed?.mode === "dark" || parsed?.mode === "light") {
+        return parsed.mode;
+      }
+      if (parsed?.mode === "system") {
+        return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      }
+    }
+  } catch {
+    // Fallback to legacy key below
+  }
+
+  const legacyTheme = localStorage.getItem("theme");
+  if (legacyTheme === "dark" || legacyTheme === "light") {
+    return legacyTheme;
+  }
+
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
 
 export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<NDKUser | undefined>(undefined);
   const [connectionStatus, setConnectionStatus] = useState<"connecting" | "connected" | "disconnected" | "error">("connecting");
-  const [theme, setTheme] = useState<"light" | "dark">(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("theme") as "light" | "dark" || "light";
-    }
-    return "light";
-  });
+  const [theme, setTheme] = useState<"light" | "dark">(getInitialTheme);
   
   // PIN unlock state
   const [showPinModal, setShowPinModal] = useState(false);
   const [pinError, setPinError] = useState("");
 
-  // Apply theme
+  // Keep context theme in sync with global theme manager.
   useEffect(() => {
-    const root = window.document.documentElement;
-    root.classList.remove("light", "dark");
-    root.classList.add(theme);
-    localStorage.setItem("theme", theme);
-  }, [theme]);
+    if (typeof window === "undefined") return;
+
+    const syncTheme = () => {
+      setTheme(window.document.documentElement.classList.contains("dark") ? "dark" : "light");
+    };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key && event.key !== THEME_STORAGE_KEY && event.key !== "theme") return;
+      syncTheme();
+    };
+
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("nostr-theme-changed", syncTheme as EventListener);
+    syncTheme();
+
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("nostr-theme-changed", syncTheme as EventListener);
+    };
+  }, []);
 
   // Check for encrypted nsec on mount
   useEffect(() => {
@@ -182,7 +223,32 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   const toggleTheme = () => {
-    setTheme(prev => prev === "light" ? "dark" : "light");
+    const nextTheme = theme === "light" ? "dark" : "light";
+    setTheme(nextTheme);
+
+    if (typeof window === "undefined") return;
+
+    const root = window.document.documentElement;
+    root.classList.remove("light", "dark");
+    root.classList.add(nextTheme);
+
+    let accentColor = "orange";
+    try {
+      const saved = localStorage.getItem(THEME_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed?.accentColor === "string") {
+          accentColor = parsed.accentColor;
+        }
+      }
+    } catch {
+      // Keep default accentColor
+    }
+
+    const payload = { mode: nextTheme, accentColor };
+    localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify(payload));
+    localStorage.setItem("theme", nextTheme);
+    window.dispatchEvent(new CustomEvent("nostr-theme-changed", { detail: payload }));
   };
 
   return (
