@@ -8,10 +8,116 @@ interface ImageUploadProps {
   onCancel?: () => void;
 }
 
+// List of image hosting services to try
+const HOSTING_SERVICES = [
+  {
+    name: "nostrcheck.me",
+    upload: async (file: File): Promise<string | null> => {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("https://nostrcheck.me/api/upload.php", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      
+      const data = await response.json();
+      // nostrcheck returns URL directly or in data.url
+      return data.url || data.data?.url || data.file_url || null;
+    },
+  },
+  {
+    name: "void.cat",
+    upload: async (file: File): Promise<string | null> => {
+      const response = await fetch("https://void.cat/upload", {
+        method: "PUT",
+        headers: {
+          "Content-Type": file.type,
+        },
+        body: file,
+      });
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      
+      const data = await response.json();
+      // void.cat returns file URL
+      return data.url || data.file?.url || null;
+    },
+  },
+  {
+    name: "pomf2.lain.la",
+    upload: async (file: File): Promise<string | null> => {
+      const formData = new FormData();
+      formData.append("files[]", file);
+
+      const response = await fetch("https://pomf2.lain.la/upload.php", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      
+      const data = await response.json();
+      // pomf returns files array
+      if (data.files?.[0]?.url) {
+        return `https://pomf2.lain.la${data.files[0].url}`;
+      }
+      return null;
+    },
+  },
+  {
+    name: "nostr.build (legacy)",
+    upload: async (file: File): Promise<string | null> => {
+      const formData = new FormData();
+      formData.append("fileToUpload", file);
+      formData.append("submit", "Upload Image");
+
+      // Try with CORS proxy first
+      try {
+        const proxyUrl = "https://api.allorigins.win/raw?url=";
+        const targetUrl = encodeURIComponent("https://nostr.build/api/upload.php");
+        
+        const response = await fetch(`${proxyUrl}${targetUrl}`, {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!response.ok) throw new Error(`Proxy failed: ${response.status}`);
+
+        const data = await response.json();
+        if (data.url) return data.url;
+        if (data.data?.url) return data.data.url;
+        
+        // Try to parse from text
+        const text = await response.text();
+        const urlMatch = text.match(/https:\/\/nostr\.build\/i\/[^\s"]+/);
+        if (urlMatch) return urlMatch[0];
+      } catch {
+        // Direct attempt (will likely fail due to CORS)
+        const response = await fetch("https://nostr.build/api/upload.php", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const data = await response.json();
+        if (data.url) return data.url;
+        if (data.data?.url) return data.data.url;
+      }
+      
+      return null;
+    },
+  },
+];
+
 export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
+  const [uploadService, setUploadService] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { error: showError } = useToast();
 
@@ -25,37 +131,25 @@ export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
     setIsDragging(false);
   }, []);
 
-  const uploadToNostrBuild = async (file: File): Promise<string | null> => {
-    const formData = new FormData();
-    formData.append("fileToUpload", file);
-    formData.append("submit", "Upload Image");
-
-    try {
-      const response = await fetch("https://nostr.build/api/upload.php", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error(`Upload failed: ${response.status}`);
+  const uploadImage = async (file: File): Promise<string | null> => {
+    // Try each service until one works
+    for (const service of HOSTING_SERVICES) {
+      try {
+        setUploadService(service.name);
+        logger.info(`Trying upload to ${service.name}...`);
+        
+        const url = await service.upload(file);
+        if (url) {
+          logger.info(`Upload successful: ${url}`);
+          return url;
+        }
+      } catch (error) {
+        logger.warn(`Upload to ${service.name} failed:`, error);
+        continue; // Try next service
       }
-
-      const data = await response.json();
-      
-      // nostr.build returns URL in various formats
-      if (data.url) return data.url;
-      if (data.data?.url) return data.data.url;
-      
-      // Fallback: try to get from response text
-      const text = await response.text();
-      const urlMatch = text.match(/https:\/\/nostr\.build\/i\/[^\s"]+/);
-      if (urlMatch) return urlMatch[0];
-
-      throw new Error("No URL in response");
-    } catch (error) {
-      logger.error("Image upload failed:", error);
-      return null;
     }
+    
+    return null;
   };
 
   const handleFile = async (file: File) => {
@@ -65,9 +159,9 @@ export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
       return;
     }
 
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      showError("Image too large. Max 5MB allowed.");
+    // Validate file size (max 10MB for better compatibility)
+    if (file.size > 10 * 1024 * 1024) {
+      showError("Image too large. Max 10MB allowed.");
       return;
     }
 
@@ -76,16 +170,18 @@ export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
     reader.onload = (e) => setPreview(e.target?.result as string);
     reader.readAsDataURL(file);
 
-    // Upload
+    // Upload with fallback
     setIsUploading(true);
-    const url = await uploadToNostrBuild(file);
+    setUploadService(null);
+    const url = await uploadImage(file);
     setIsUploading(false);
+    setUploadService(null);
 
     if (url) {
       onImageUploaded(url);
       setPreview(null);
     } else {
-      showError("Failed to upload image. Please try again.");
+      showError("Failed to upload image. All services unavailable. Try again later or use an external host.");
     }
   };
 
@@ -106,7 +202,9 @@ export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
     return (
       <div className="flex flex-col items-center justify-center p-8 bg-accent/30 rounded-xl border-2 border-dashed border-accent">
         <Loader2 size={32} className="animate-spin text-[var(--primary)] mb-3" />
-        <p className="text-sm font-medium text-muted-foreground">Uploading image...</p>
+        <p className="text-sm font-medium text-muted-foreground">
+          Uploading{uploadService ? ` via ${uploadService}...` : "..."}
+        </p>
         {preview && (
           <img
             src={preview}
@@ -162,20 +260,25 @@ export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
       </p>
 
       <p className="text-xs text-muted-foreground mt-1">
-        Max 5MB • JPG, PNG, GIF, WebP
+        Max 10MB • JPG, PNG, GIF, WebP
       </p>
 
-      <div className="flex items-center gap-1 mt-3 text-xs text-muted-foreground">
-        <span>Powered by</span>
-        <a
-          href="https://nostr.build"
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          className="text-[var(--primary)] hover:underline"
-        >
-          nostr.build
-        </a>
+      <div className="flex items-center gap-1 mt-3 text-[10px] text-muted-foreground flex-wrap justify-center">
+        <span>Services:</span>
+        {HOSTING_SERVICES.map((s, i) => (
+          <span key={s.name}>
+            <a
+              href={`https://${s.name.split(" ")[0]}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="hover:text-[var(--primary)] hover:underline"
+            >
+              {s.name.split(" ")[0]}
+            </a>
+            {i < HOSTING_SERVICES.length - 1 && ", "}
+          </span>
+        ))}
       </div>
     </div>
   );
