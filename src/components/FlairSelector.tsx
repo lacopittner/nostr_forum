@@ -5,12 +5,31 @@ interface FlairSelectorProps {
   selectedFlair: string | null;
   onSelect: (flair: string | null) => void;
   disabled?: boolean;
+  compact?: boolean;
 }
 
-export function FlairSelector({ flairs, selectedFlair, onSelect, disabled }: FlairSelectorProps) {
+export function FlairSelector({ flairs, selectedFlair, onSelect, disabled, compact }: FlairSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   if (flairs.length === 0) return null;
+
+  // Compact mode: smaller, inline button for CreatePost
+  if (compact) {
+    return (
+      <button
+        type="button"
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        disabled={disabled}
+        className={`flex items-center space-x-2 px-4 py-2 rounded-full font-bold text-sm transition-all ${
+          selectedFlair
+            ? "bg-[var(--primary)]/20 text-[var(--primary)]"
+            : "text-muted-foreground hover:text-foreground hover:bg-accent"
+        } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+      >
+        <span>{selectedFlair || "Flair"}</span>
+      </button>
+    );
+  }
 
   return (
     <div className="relative">

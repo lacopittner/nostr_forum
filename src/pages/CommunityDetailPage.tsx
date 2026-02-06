@@ -2,18 +2,18 @@ import { useNostr } from "../providers/NostrProvider";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
-import { Edit2, Send, ArrowLeft, Shield, Users, ArrowBigUp, ArrowBigDown, Gavel, UserPlus, UserCheck, Search, Book, AlertCircle, Loader2 } from "lucide-react";
+import { Edit2, ArrowLeft, Shield, Users, ArrowBigUp, ArrowBigDown, Gavel, UserPlus, UserCheck, Search, Book, AlertCircle } from "lucide-react";
 import { EditCommunityModal } from "../components/EditCommunityModal";
 import { ManageModeratorsModal } from "../components/ManageModeratorsModal";
 import { ManageBlockedUsersModal } from "../components/ManageBlockedUsersModal";
 import { useCommunityBlocks } from "../hooks/useCommunityBlocks";
 import { useCommunityMembership } from "../hooks/useCommunityMembership";
 import { useVoting } from "../hooks/useVoting";
-import { FlairSelector } from "../components/FlairSelector";
 import { PostActionsMenu } from "../components/PostActionsMenu";
 import { CommunityWikiModal } from "../components/CommunityWikiModal";
 import { SavePostButton } from "../components/SavePostButton";
 import { ZapButton } from "../components/ZapButton";
+import { CreatePost } from "../components/CreatePost";
 import { logger } from "../lib/logger";
 import { useToast } from "../lib/toast";
 
@@ -21,20 +21,16 @@ export function CommunityDetailPage() {
   const { ndk, user } = useNostr();
   const { pubkey, communityId } = useParams<{ pubkey: string; communityId: string }>();
   const navigate = useNavigate();
-  const { success, error: showError } = useToast();
+  const { error: showError } = useToast();
   const [community, setCommunity] = useState<NDKEvent | null>(null);
   const [posts, setPosts] = useState<NDKEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [newPostContent, setNewPostContent] = useState("");
-  const [isPublishing, setIsPublishing] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showModeratorsModal, setShowModeratorsModal] = useState(false);
   const [showBlockedModal, setShowBlockedModal] = useState(false);
   const [showWikiModal, setShowWikiModal] = useState(false);
-  const [selectedFlair, setSelectedFlair] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredPosts, setFilteredPosts] = useState<NDKEvent[]>([]);
-  const [postError, setPostError] = useState<string | null>(null);
   
   // Track edited posts
   const [editedPosts, setEditedPosts] = useState<Set<string>>(new Set());
@@ -268,46 +264,6 @@ export function CommunityDetailPage() {
     };
   };
 
-  const handleCreatePost = async () => {
-    if (!newPostContent.trim() || !user || !community || isPublishing) return;
-    
-    // Check if user is blocked
-    if (isCurrentUserBlocked()) {
-      setPostError("You have been blocked from posting in this community.");
-      return;
-    }
-
-    setIsPublishing(true);
-    setPostError(null);
-    
-    try {
-      const event = new NDKEvent(ndk);
-      event.kind = NDKKind.Text;
-      event.content = newPostContent;
-      
-      const communityATag = `34550:${pubkey}:${communityId}`;
-      event.tags = [
-        ["a", communityATag, community.pubkey, "root"],
-        ["t", "community"]
-      ];
-      
-      // Add flair if selected
-      if (selectedFlair) {
-        event.tags.push(["flair", selectedFlair]);
-      }
-      
-      await event.publish();
-      setNewPostContent("");
-      setSelectedFlair(null);
-      success("Post published successfully!");
-    } catch (error) {
-      logger.error("Failed to publish post:", error); showError("Failed to publish post. Check your relay connection.");
-      setPostError("Failed to publish post. Check your relay connection.");
-    } finally {
-      setIsPublishing(false);
-    }
-  };
-
   const handleVote = (post: NDKEvent, type: "UPVOTE" | "DOWNVOTE") => {
     handleReaction(post, type);
   };
@@ -509,47 +465,31 @@ export function CommunityDetailPage() {
       )}
 
       {/* Create Post */}
-      {user && !isCurrentUserBlocked() && (
-        <div className="bg-card border rounded-xl p-4 shadow-sm">
-          {postError && (
-            <div className="mb-3 flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
-              <AlertCircle size={16} />
-              <span>{postError}</span>
-            </div>
-          )}
-          <textarea
-            value={newPostContent}
-            onChange={(e) => setNewPostContent(e.target.value)}
-            placeholder="Share something with this community..."
-            className="w-full bg-accent/50 border-none rounded-lg p-3 text-sm focus:ring-1 focus:ring-[var(--primary)] min-h-[100px] resize-none overflow-hidden"
-          />
-          <div className="mt-3 flex items-center justify-between">
-            {/* Flair Selector */}
-            <FlairSelector
-              flairs={communityInfo.flairs}
-              selectedFlair={selectedFlair}
-              onSelect={setSelectedFlair}
-            />
-            
-            <button
-              onClick={handleCreatePost}
-              disabled={isPublishing || !newPostContent.trim()}
-              className="flex items-center space-x-2 px-6 py-2 bg-[var(--primary)] text-white rounded-full font-bold text-sm hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all"
-            >
-              {isPublishing ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" />
-                  <span>Posting...</span>
-                </>
-              ) : (
-                <>
-                  <Send size={16} />
-                  <span>Post</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
+      {user && !isCurrentUserBlocked() && community && (
+        <CreatePost
+          community={{
+            id: communityId || "",
+            pubkey: community.pubkey,
+            name: communityInfo.name,
+            atag: `34550:${pubkey}:${communityId}`,
+            flairs: communityInfo.flairs,
+          }}
+          onPostCreated={() => {
+            // Refresh posts after creating
+            seenPostIds.current.clear();
+            // Reload posts
+            const communityATag = `34550:${pubkey}:${communityId}`;
+            ndk.fetchEvents(
+              { kinds: [NDKKind.Text], "#a": [communityATag], limit: 50 },
+              { closeOnEose: true }
+            ).then((fetchedEvents) => {
+              const newPosts = Array.from(fetchedEvents).sort(
+                (a, b) => (b.created_at || 0) - (a.created_at || 0)
+              );
+              setPosts(newPosts);
+            });
+          }}
+        />
       )}
 
       {/* Posts */}

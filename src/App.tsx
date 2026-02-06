@@ -1,6 +1,6 @@
 import { NostrProvider, useNostr } from "./providers/NostrProvider";
 import { AppShell } from "./components/layout/AppShell";
-import { ArrowBigUp, ArrowBigDown, MessageSquare, Share2, MoreHorizontal, Send, AlertCircle, Loader2, Edit3, Trash2 } from "lucide-react";
+import { ArrowBigUp, ArrowBigDown, MessageSquare, Share2, MoreHorizontal, Loader2, Edit3, Trash2, AlertCircle } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
 import { BrowserRouter as Router, Routes, Route, useNavigate } from "react-router-dom";
@@ -13,7 +13,7 @@ import { CommunityDetailPage } from "./pages/CommunityDetailPage";
 import { PostDetailPage } from "./pages/PostDetailPage";
 import { SavePostButton } from "./components/SavePostButton";
 import { ZapButton } from "./components/ZapButton";
-import { ImageUpload } from "./components/ImageUpload";
+import { CreatePost } from "./components/CreatePost";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ConnectionStatus } from "./components/ConnectionStatus";
 import { InfiniteScroll } from "./components/InfiniteScroll";
@@ -31,11 +31,8 @@ import { NDKProfile } from "./lib/types";
 function Feed() {
   const { ndk, user } = useNostr();
   const navigate = useNavigate();
-  const { success, error: showError } = useToast();
+  const { error: showError } = useToast();
   const [posts, setPosts] = useState<NDKEvent[]>([]);
-  const [newPostContent, setNewPostContent] = useState("");
-  const [isPublishing, setIsPublishing] = useState(false);
-  const [postError, setPostError] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyContent, setReplyContent] = useState("");
   const [postActionMenuOpen, setPostActionMenuOpen] = useState<string | null>(null);
@@ -44,7 +41,88 @@ function Feed() {
   const [commentCounts] = useState<Record<string, number>>({});
   const [sortBy, setSortBy] = useState<"hot" | "new" | "top">("new");
   const [feedFilter, setFeedFilter] = useState<"all" | "following">("all");
-  const [showImageUpload, setShowImageUpload] = useState(false);
+  
+  // Communities for post creation
+  const [myCommunities, setMyCommunities] = useState<Array<{id: string, pubkey: string, name: string, atag: string}>>([]);
+  
+  // Fetch user's communities
+  useEffect(() => {
+    if (!user || !ndk) {
+      setMyCommunities([]);
+      return;
+    }
+
+    let sub: ReturnType<typeof ndk.subscribe> | null = null;
+    let isActive = true;
+
+    const fetchCommunities = async () => {
+      try {
+        // Fetch communities from user's membership list (kind 30001)
+        sub = ndk.subscribe(
+          {
+            kinds: [30001],
+            authors: [user.pubkey],
+            "#d": ["communities"]
+          },
+          { closeOnEose: true }
+        );
+
+        let latestEvent: NDKEvent | null = null;
+
+        sub.on("event", (event) => {
+          const createdAt = event.created_at || 0;
+          if (!latestEvent || createdAt > (latestEvent.created_at || 0)) {
+            latestEvent = event;
+          }
+        });
+
+        sub.on("eose", async () => {
+          if (!isActive) return;
+          if (!latestEvent) {
+            setMyCommunities([]);
+            return;
+          }
+
+          const communityRefs = latestEvent.tags
+            .filter(t => t[0] === "a")
+            .map(t => t[1])
+            .filter(atag => atag.startsWith("34550:"));
+
+          const communityEntries = await Promise.all(
+            communityRefs.map(async (atag) => {
+              const [, pubkey, id] = atag.split(":");
+              const community = await ndk.fetchEvent({
+                kinds: [34550 as any],
+                authors: [pubkey],
+                "#d": [id]
+              });
+
+              if (!community) return null;
+              const name = community.tags.find(t => t[0] === "name")?.[1] || "Unnamed";
+              return { id, pubkey, name, atag };
+            })
+          );
+
+          const uniqueEntries = communityEntries.filter(
+            (entry): entry is { id: string; pubkey: string; name: string; atag: string } => Boolean(entry)
+          );
+
+          setMyCommunities(uniqueEntries);
+        });
+      } catch (error) {
+        logger.error("Failed to fetch communities", error);
+      }
+    };
+
+    fetchCommunities();
+
+    return () => {
+      isActive = false;
+      if (sub) {
+        sub.stop();
+      }
+    };
+  }, [ndk, user]);
   
   // Pull to refresh
   const { isPulling, pullDistance, isRefreshing } = usePullToRefresh(async () => {
@@ -61,13 +139,6 @@ function Feed() {
 
   // Get following list for filtering
   const { following } = useFollows();
-  
-  // Rate limiting for posts
-  const { checkRateLimit: checkPostRateLimit } = useRateLimit("posting", {
-    maxAttempts: 3,
-    windowMs: 60000, // 3 posts per minute
-    cooldownMs: 30000,
-  });
 
   // Voting - use the custom hook instead of duplicating logic
   const { reactions, userVotes, votingIds, error: votingError, handleReaction, processIncomingReaction, processIncomingDeletion } = useVoting();
@@ -224,32 +295,6 @@ function Feed() {
     setPosts(prev => sortPosts(prev, sortBy));
   }, [sortBy, reactions]);
 
-  const handleCreatePost = async () => {
-    if (!newPostContent.trim() || !user || isPublishing) return;
-    
-    // Check rate limit
-    if (!checkPostRateLimit()) return;
-
-    setIsPublishing(true);
-    setPostError(null);
-    
-    try {
-      const event = new NDKEvent(ndk);
-      event.kind = NDKKind.Text;
-      event.content = newPostContent;
-      event.tags = [["t", "nostr"], ["a", "34550:global:community"]];
-      await event.publish();
-      setNewPostContent("");
-      success("Post published successfully!");
-    } catch (error) {
-      logger.error("Failed to publish post:", error);
-      setPostError("Failed to publish post. Check your relay connection.");
-      showError("Failed to publish post. Check your relay connection.");
-    } finally {
-      setIsPublishing(false);
-    }
-  };
-
   const handleVote = (post: NDKEvent, type: "UPVOTE" | "DOWNVOTE") => {
     handleReaction(post, type);
   };
@@ -261,13 +306,15 @@ function Feed() {
     cooldownMs: 30000,
   });
 
+  const [isReplyPublishing, setIsReplyPublishing] = useState(false);
+
   const handleReply = async (post: NDKEvent) => {
-    if (!replyContent.trim() || !user || isPublishing) return;
+    if (!replyContent.trim() || !user || isReplyPublishing) return;
     
     // Check rate limit
     if (!checkReplyRateLimit()) return;
 
-    setIsPublishing(true);
+    setIsReplyPublishing(true);
     try {
       const event = new NDKEvent(ndk);
       event.kind = NDKKind.Text;
@@ -290,7 +337,7 @@ function Feed() {
       logger.error("Failed to publish reply", error);
       showError("Failed to publish reply. Please try again.");
     } finally {
-      setIsPublishing(false);
+      setIsReplyPublishing(false);
     }
   };
 
@@ -298,50 +345,15 @@ function Feed() {
     <div className="space-y-6">
       {/* Create Post Area */}
       {user && (
-        <div className="bg-card border rounded-xl p-4 shadow-sm">
-          {postError && (
-            <div className="mb-3 flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
-              <AlertCircle size={16} />
-              <span>{postError}</span>
-            </div>
-          )}
-          <textarea
-            value={newPostContent}
-            onChange={(e) => setNewPostContent(e.target.value)}
-            placeholder="What's on your mind? (Posts will be Kind 1 notes)"
-            className="w-full bg-accent/50 border-none rounded-lg p-3 text-sm focus:ring-1 focus:ring-[var(--primary)] min-h-[100px] resize-none overflow-hidden"
-          />
-
-          {showImageUpload && (
-            <div className="mt-3">
-              <ImageUpload
-                onImageUploaded={(url) => {
-                  setNewPostContent((prev) => prev + (prev ? '\n' : '') + url);
-                  setShowImageUpload(false);
-                }}
-                onCancel={() => setShowImageUpload(false)}
-              />
-            </div>
-          )}
-
-          <div className="mt-3 flex justify-between items-center">
-            <button
-              onClick={() => setShowImageUpload(!showImageUpload)}
-              className="flex items-center space-x-2 px-4 py-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-full font-bold text-sm transition-all"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
-              <span>Image</span>
-            </button>
-            <button
-              onClick={handleCreatePost}
-              disabled={isPublishing || !newPostContent.trim()}
-              className="flex items-center space-x-2 px-6 py-2 bg-[var(--primary)] text-white rounded-full font-bold text-sm hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all"
-            >
-              <Send size={16} />
-              <span>{isPublishing ? "Posting..." : "Post to Nostr"}</span>
-            </button>
-          </div>
-        </div>
+        <CreatePost
+          communities={myCommunities}
+          onPostCreated={() => {
+            // Refresh posts after creating
+            seenEventIds.current.clear();
+            setUntil(undefined);
+            loadPosts();
+          }}
+        />
       )}
 
       {/* Posts with Infinite Scroll */}
@@ -631,10 +643,10 @@ function Feed() {
                             </button>
                             <button 
                               onClick={() => handleReply(post)}
-                              disabled={!replyContent.trim() || isPublishing}
+                              disabled={!replyContent.trim() || isReplyPublishing}
                               className="flex items-center gap-2 px-4 py-1.5 bg-[var(--primary)] text-white rounded-full text-xs font-bold hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-colors"
                             >
-                              {isPublishing ? (
+                              {isReplyPublishing ? (
                                 <>
                                   <Loader2 size={14} className="animate-spin" />
                                   Posting...
