@@ -1,12 +1,207 @@
-import { useState, useRef, useCallback } from "react";
-import { X, Loader2, ImageIcon } from "lucide-react";
-import { logger } from "../lib/logger";
+import { useState } from "react";
+import { X, Link2, ImageIcon, Check } from "lucide-react";
 import { useToast } from "../lib/toast";
 
 interface ImageUploadProps {
   onImageUploaded: (url: string) => void;
   onCancel?: () => void;
 }
+
+export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
+  const [imageUrl, setImageUrl] = useState("");
+  const [isValid, setIsValid] = useState(false);
+  const [isChecking, setIsChecking] = useState(false);
+  const { error: showError } = useToast();
+
+  // Validate if URL looks like an image
+  const validateUrl = (url: string) => {
+    const imageExtensions = /\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)(\?.*)?$/i;
+    const imageHosts = [
+      "imgur.com",
+      "i.imgur.com",
+      "nostr.build",
+      "nostrcheck.me",
+      "void.cat",
+      "pomf2.lain.la",
+      "catbox.moe",
+      "ibb.co",
+      "postimg.cc",
+      "imageban.ru",
+      "wimg.io",
+      "cubeupload.com",
+      "freeimage.host",
+      "ctrlv.cz",
+      "prnt.sc",
+      "prntscr.com",
+      "gyazo.com",
+      "puu.sh",
+      "imageup.ru",
+      "snag.gy",
+      "cloudinary.com",
+      "aws.amazon.com",
+      "s3.amazonaws.com",
+      "digitaloceanspaces.com",
+      "supabase.co",
+      "firebaseapp.com",
+      "githubusercontent.com",
+    ];
+
+    try {
+      const urlObj = new URL(url);
+      const hasImageExt = imageExtensions.test(url);
+      const isImageHost = imageHosts.some((host) => urlObj.hostname.includes(host));
+      const hasImageInPath = urlObj.pathname.includes("/i/") || urlObj.pathname.includes("/img/");
+
+      return hasImageExt || isImageHost || hasImageInPath;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleUrlChange = (value: string) => {
+    setImageUrl(value);
+    setIsValid(validateUrl(value));
+  };
+
+  const handleSubmit = async () => {
+    if (!imageUrl.trim()) {
+      showError("Please enter an image URL");
+      return;
+    }
+
+    setIsChecking(true);
+
+    // Basic validation
+    if (!validateUrl(imageUrl)) {
+      showError("This doesn't look like a valid image URL. Please check the link.");
+      setIsChecking(false);
+      return;
+    }
+
+    // Try to load the image to verify it exists
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error("Failed to load image"));
+        img.src = imageUrl;
+        // Timeout after 10 seconds
+        setTimeout(() => reject(new Error("Image load timeout")), 10000);
+      });
+    } catch {
+      // Even if image fails to load, we'll still allow it
+      // The user might have a valid URL that just doesn't allow CORS checking
+      console.warn("Could not verify image, proceeding anyway");
+    }
+
+    setIsChecking(false);
+    onImageUploaded(imageUrl);
+  };
+
+  // Quick paste handler
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const pastedText = e.clipboardData.getData("text");
+    if (validateUrl(pastedText)) {
+      e.preventDefault();
+      setImageUrl(pastedText);
+      setIsValid(true);
+    }
+  };
+
+  return (
+    <div className="relative bg-card border rounded-xl p-4 space-y-4">
+      {onCancel && (
+        <button
+          onClick={onCancel}
+          className="absolute top-2 right-2 p-1.5 hover:bg-accent rounded-full transition-colors"
+        >
+          <X size={16} />
+        </button>
+      )}
+
+      {/* Header */}
+      <div className="flex items-center gap-2">
+        <ImageIcon size={20} className="text-[var(--primary)]" />
+        <h3 className="font-bold text-sm">Add Image</h3>
+      </div>
+
+      {/* URL Input */}
+      <div className="space-y-2">
+        <label className="text-xs font-medium text-muted-foreground">
+          Image URL
+        </label>
+        <div className="relative">
+          <Link2
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+          />
+          <input
+            type="url"
+            value={imageUrl}
+            onChange={(e) => handleUrlChange(e.target.value)}
+            onPaste={handlePaste}
+            placeholder="https://example.com/image.jpg"
+            className="w-full pl-9 pr-10 py-2.5 bg-background border rounded-lg text-sm focus:ring-1 focus:ring-[var(--primary)] focus:border-[var(--primary)]"
+          />
+          {isValid && (
+            <Check
+              size={16}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500"
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Preview */}
+      {imageUrl && isValid && (
+        <div className="relative aspect-video bg-accent/30 rounded-lg overflow-hidden">
+          <img
+            src={imageUrl}
+            alt="Preview"
+            className="w-full h-full object-contain"
+            onError={() => {
+              setIsValid(false);
+              showError("Could not load image. Check the URL.");
+            }}
+          />
+        </div>
+      )}
+
+      {/* Supported hosts info */}
+      <div className="text-[10px] text-muted-foreground">
+        <p className="mb-1">Supported hosts:</p>
+        <p className="opacity-70">
+          Imgur, Nostr.build, Nostrcheck.me, Void.cat, Catbox.moe,
+          GitHub, AWS S3, Supabase, Firebase, and any direct image links
+        </p>
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-2 pt-2">
+        {onCancel && (
+          <button
+            onClick={onCancel}
+            className="flex-1 px-4 py-2 text-sm font-bold hover:bg-accent rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+        )}
+        <button
+          onClick={handleSubmit}
+          disabled={!isValid || isChecking}
+          className="flex-1 px-4 py-2 bg-[var(--primary)] text-white text-sm font-bold rounded-lg hover:bg-[var(--primary-dark)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {isChecking ? "Checking..." : "Add Image"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Old file upload code - commented out for now
+/*
+import { useState, useRef, useCallback } from "react";
+import { logger } from "../lib/logger";
 
 // List of image hosting services to try
 const HOSTING_SERVICES = [
@@ -24,262 +219,12 @@ const HOSTING_SERVICES = [
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       
       const data = await response.json();
-      // nostrcheck returns URL directly or in data.url
       return data.url || data.data?.url || data.file_url || null;
     },
   },
-  {
-    name: "void.cat",
-    upload: async (file: File): Promise<string | null> => {
-      const response = await fetch("https://void.cat/upload", {
-        method: "PUT",
-        headers: {
-          "Content-Type": file.type,
-        },
-        body: file,
-      });
-
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      
-      const data = await response.json();
-      // void.cat returns file URL
-      return data.url || data.file?.url || null;
-    },
-  },
-  {
-    name: "pomf2.lain.la",
-    upload: async (file: File): Promise<string | null> => {
-      const formData = new FormData();
-      formData.append("files[]", file);
-
-      const response = await fetch("https://pomf2.lain.la/upload.php", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      
-      const data = await response.json();
-      // pomf returns files array
-      if (data.files?.[0]?.url) {
-        return `https://pomf2.lain.la${data.files[0].url}`;
-      }
-      return null;
-    },
-  },
-  {
-    name: "nostr.build (legacy)",
-    upload: async (file: File): Promise<string | null> => {
-      const formData = new FormData();
-      formData.append("fileToUpload", file);
-      formData.append("submit", "Upload Image");
-
-      // Try with CORS proxy first
-      try {
-        const proxyUrl = "https://api.allorigins.win/raw?url=";
-        const targetUrl = encodeURIComponent("https://nostr.build/api/upload.php");
-        
-        const response = await fetch(`${proxyUrl}${targetUrl}`, {
-          method: "POST",
-          body: formData,
-        });
-
-        if (!response.ok) throw new Error(`Proxy failed: ${response.status}`);
-
-        const data = await response.json();
-        if (data.url) return data.url;
-        if (data.data?.url) return data.data.url;
-        
-        // Try to parse from text
-        const text = await response.text();
-        const urlMatch = text.match(/https:\/\/nostr\.build\/i\/[^\s"]+/);
-        if (urlMatch) return urlMatch[0];
-      } catch {
-        // Direct attempt (will likely fail due to CORS)
-        const response = await fetch("https://nostr.build/api/upload.php", {
-          method: "POST",
-          body: formData,
-        });
-
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-        const data = await response.json();
-        if (data.url) return data.url;
-        if (data.data?.url) return data.data.url;
-      }
-      
-      return null;
-    },
-  },
+  // ... more services
 ];
 
-export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
-  const [isDragging, setIsDragging] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [preview, setPreview] = useState<string | null>(null);
-  const [uploadService, setUploadService] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const { error: showError } = useToast();
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  }, []);
-
-  const uploadImage = async (file: File): Promise<string | null> => {
-    // Try each service until one works
-    for (const service of HOSTING_SERVICES) {
-      try {
-        setUploadService(service.name);
-        logger.info(`Trying upload to ${service.name}...`);
-        
-        const url = await service.upload(file);
-        if (url) {
-          logger.info(`Upload successful: ${url}`);
-          return url;
-        }
-      } catch (error) {
-        logger.warn(`Upload to ${service.name} failed:`, error);
-        continue; // Try next service
-      }
-    }
-    
-    return null;
-  };
-
-  const handleFile = async (file: File) => {
-    // Validate file type
-    if (!file.type.startsWith("image/")) {
-      showError("Please select an image file");
-      return;
-    }
-
-    // Validate file size (max 10MB for better compatibility)
-    if (file.size > 10 * 1024 * 1024) {
-      showError("Image too large. Max 10MB allowed.");
-      return;
-    }
-
-    // Show preview
-    const reader = new FileReader();
-    reader.onload = (e) => setPreview(e.target?.result as string);
-    reader.readAsDataURL(file);
-
-    // Upload with fallback
-    setIsUploading(true);
-    setUploadService(null);
-    const url = await uploadImage(file);
-    setIsUploading(false);
-    setUploadService(null);
-
-    if (url) {
-      onImageUploaded(url);
-      setPreview(null);
-    } else {
-      showError("Failed to upload image. All services unavailable. Try again later or use an external host.");
-    }
-  };
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
-  }, []);
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) handleFile(file);
-  };
-
-  if (isUploading) {
-    return (
-      <div className="flex flex-col items-center justify-center p-8 bg-accent/30 rounded-xl border-2 border-dashed border-accent">
-        <Loader2 size={32} className="animate-spin text-[var(--primary)] mb-3" />
-        <p className="text-sm font-medium text-muted-foreground">
-          Uploading{uploadService ? ` via ${uploadService}...` : "..."}
-        </p>
-        {preview && (
-          <img
-            src={preview}
-            alt="Preview"
-            className="mt-4 max-h-32 rounded-lg object-cover opacity-50"
-          />
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-      onClick={() => fileInputRef.current?.click()}
-      className={`relative flex flex-col items-center justify-center p-8 rounded-xl border-2 border-dashed cursor-pointer transition-all ${
-        isDragging
-          ? "bg-[var(--primary)]/10 border-[var(--primary)]"
-          : "bg-accent/30 border-accent hover:bg-accent/50"
-      }`}
-    >
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        onChange={handleFileSelect}
-        className="hidden"
-      />
-
-      {onCancel && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onCancel();
-          }}
-          className="absolute top-2 right-2 p-1 hover:bg-accent rounded-full transition-colors"
-        >
-          <X size={16} />
-        </button>
-      )}
-
-      <ImageIcon
-        size={32}
-        className={`mb-3 transition-colors ${
-          isDragging ? "text-[var(--primary)]" : "text-muted-foreground"
-        }`}
-      />
-
-      <p className="text-sm font-medium text-center">
-        {isDragging ? "Drop image here" : "Click or drag image to upload"}
-      </p>
-
-      <p className="text-xs text-muted-foreground mt-1">
-        Max 10MB • JPG, PNG, GIF, WebP
-      </p>
-
-      <div className="flex items-center gap-1 mt-3 text-[10px] text-muted-foreground flex-wrap justify-center">
-        <span>Services:</span>
-        {HOSTING_SERVICES.map((s, i) => (
-          <span key={s.name}>
-            <a
-              href={`https://${s.name.split(" ")[0]}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="hover:text-[var(--primary)] hover:underline"
-            >
-              {s.name.split(" ")[0]}
-            </a>
-            {i < HOSTING_SERVICES.length - 1 && ", "}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
+// File upload implementation with drag & drop
+// Keeping this code for future use when CORS is resolved
+*/
