@@ -36,6 +36,37 @@ We map Reddit features to specific Nostr Implementation Possibilities (NIPs).
 
 ---
 
+## 📝 TODO / Known Issues
+
+### Image Upload & Hosting
+**Status:** Partially implemented with workarounds
+
+**Problem:**
+- Direct file upload to image hosting services (nostr.build, imgur, etc.) fails due to CORS policy restrictions when running on localhost
+- Imgur blocks hotlinking (returns 403 Forbidden) for many images
+- Other hosting services have inconsistent CORS support
+
+**Current Workaround:**
+- Users must paste direct image URLs instead of uploading files
+- The app validates URLs and attempts to convert gallery links (e.g., `imgur.com/xxx` → `i.imgur.com/xxx.jpg`)
+- Fallback chain attempts `.jpg` → `.png` → no extension for Imgur links
+- Even if preview fails, users can still add the image URL
+
+**Future Solutions:**
+- [ ] Implement NIP-96 compliant upload with signed requests
+- [ ] Add base64 image embedding for small images (< 50KB)
+- [ ] Integrate with Nostr-native image hosts that support CORS
+- [ ] Add server-side proxy for image uploads (requires backend)
+
+**Recommended Image Hosts:**
+- `nostr.build` - Nostr-native (CORS issues on localhost, works in production)
+- `i.imgur.com` - Direct links only (gallery links auto-converted)
+- `catbox.moe` - Good CORS support
+- `void.cat` - Simple, no account needed
+- GitHub - Upload to repo, use raw links
+
+---
+
 ## 📂 Project Structure
 
 Maintain this structure to keep the codebase clean:
