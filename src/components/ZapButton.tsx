@@ -8,6 +8,7 @@ interface ZapButtonProps {
   existingZaps?: number;
   size?: "sm" | "md" | "lg";
   showAmount?: boolean;
+  showText?: boolean;
 }
 
 const ZAP_AMOUNTS = [21, 69, 210, 420, 1000, 5000];
@@ -17,7 +18,8 @@ export function ZapButton({
   eventId, 
   existingZaps = 0, 
   size = "sm",
-  showAmount = true 
+  showAmount = true,
+  showText = false
 }: ZapButtonProps) {
   const { sendZap, getLightningAddress, isLoading } = useZaps();
   const [isOpen, setIsOpen] = useState(false);
@@ -60,11 +62,12 @@ export function ZapButton({
         }}
         disabled={isLoading}
         className={`flex items-center gap-1.5 transition-all hover:text-yellow-500 ${
-          existingZaps > 0 ? "text-yellow-500" : "text-gray-400"
-        } ${isLoading ? "opacity-50" : ""}`}
+          existingZaps > 0 ? "text-yellow-500" : "text-muted-foreground"
+        } ${isLoading ? "opacity-50" : ""} ${showText ? "px-2 py-1.5 hover:bg-accent rounded-md text-xs font-bold" : ""}`}
         title="Send sats"
       >
         <Zap size={iconSize} fill={existingZaps > 0 ? "currentColor" : "none"} />
+        {showText && <span>Zap</span>}
         {showAmount && existingZaps > 0 && (
           <span className="text-xs font-bold">{formatAmount(existingZaps)}</span>
         )}

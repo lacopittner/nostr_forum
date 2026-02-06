@@ -2,10 +2,12 @@ import { useNostr } from "../providers/NostrProvider";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
-import { ArrowLeft, ArrowBigUp, ArrowBigDown, MessageSquare, Send, AlertCircle, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowBigUp, ArrowBigDown, MessageSquare, Send, AlertCircle, Loader2, MoreHorizontal, Share2, Trash2, Edit3 } from "lucide-react";
 import { CommentThread } from "../components/CommentThread";
 import { useVoting } from "../hooks/useVoting";
 import { PostContent } from "../components/PostContent";
+import { ZapButton } from "../components/ZapButton";
+import { SavePostButton } from "../components/SavePostButton";
 import { logger } from "../lib/logger";
 import { useToast } from "../lib/toast";
 
@@ -29,6 +31,9 @@ export function PostDetailPage() {
   // Reply state
   const [replyContent, setReplyContent] = useState("");
   const [isPublishing, setIsPublishing] = useState(false);
+  const [showActionsMenu, setShowActionsMenu] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState("");
   
   // Voting - use the custom hook instead of duplicating logic
   const { reactions, userVotes, votingIds, error: votingError, handleReaction, processIncomingReaction, processIncomingDeletion } = useVoting();
@@ -323,6 +328,61 @@ export function PostDetailPage() {
     }
   };
 
+  const handleDeletePost = async () => {
+    if (!user || !post) return;
+    if (post.pubkey !== user.pubkey) {
+      showError("You can only delete your own posts");
+      return;
+    }
+    
+    if (!confirm("Are you sure you want to delete this post?")) return;
+    
+    try {
+      const deletion = new NDKEvent(ndk);
+      deletion.kind = 5;
+      deletion.content = "Deleted by author";
+      deletion.tags = [["e", post.id]];
+      
+      await deletion.publish();
+      success("Post deleted");
+      navigate(-1);
+    } catch (error) {
+      logger.error("Failed to delete post", error);
+      showError("Failed to delete post");
+    }
+  };
+
+  const handleEditPost = async () => {
+    if (!user || !post) return;
+    if (post.pubkey !== user.pubkey) {
+      showError("You can only edit your own posts");
+      return;
+    }
+    
+    if (!editContent.trim()) return;
+    
+    try {
+      const editEvent = new NDKEvent(ndk);
+      editEvent.kind = NDKKind.Text;
+      editEvent.content = editContent;
+      editEvent.tags = post.tags.filter(t => t[0] !== "e"); // Keep all tags except thread refs
+      
+      await editEvent.publish();
+      // Update the post content directly on the existing object
+      if (post) {
+        post.content = editContent;
+        setPost(post); // Use same object to preserve type
+      }
+      setIsEditing(false);
+      success("Post updated");
+    } catch (error) {
+      logger.error("Failed to edit post", error);
+      showError("Failed to edit post");
+    }
+  };
+
+  const isOwnPost = user && post && post.pubkey === user.pubkey;
+
   const getTotalCommentCount = (commentList: Comment[]): number => {
     return commentList.reduce((acc, comment) => {
       return acc + 1 + getTotalCommentCount(comment.replies);
@@ -393,10 +453,128 @@ export function PostDetailPage() {
               <span className="font-mono">{post.pubkey.slice(0, 12)}...</span>
               <span>•</span>
               <span>{new Date((post.created_at || 0) * 1000).toLocaleString()}</span>
+              
+              {/* Actions menu */}
+              <div className="relative ml-auto">
+                <button
+                  onClick={() => setShowActionsMenu(!showActionsMenu)}
+                  className="p-1.5 hover:bg-accent rounded-full transition-colors"
+                >
+                  <MoreHorizontal size={16} />
+                </button>
+                
+                {showActionsMenu && (
+                  <div className="absolute right-0 top-full mt-1 w-40 bg-card border rounded-lg shadow-lg z-10 py-1">
+                    {isOwnPost ? (
+                      <>
+                        <button
+                          onClick={() => {
+                            setIsEditing(true);
+                            setEditContent(post.content);
+                            setShowActionsMenu(false);
+                          }}
+                          className="w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
+                        >
+                          <Edit3 size={14} />
+                          Edit Post
+                        </button>
+                        <button
+                          onClick={() => {
+                            handleDeletePost();
+                            setShowActionsMenu(false);
+                          }}
+                          className="w-full px-4 py-2 text-left text-sm hover:bg-accent text-red-500 flex items-center gap-2"
+                        >
+                          <Trash2 size={14} />
+                          Delete Post
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(window.location.href);
+                            success("Link copied to clipboard");
+                            setShowActionsMenu(false);
+                          }}
+                          className="w-full px-4 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
+                        >
+                          <Share2 size={14} />
+                          Share Post
+                        </button>
+                        <button
+                          onClick={() => {
+                            alert("Report feature coming soon");
+                            setShowActionsMenu(false);
+                          }}
+                          className="w-full px-4 py-2 text-left text-sm hover:bg-accent text-muted-foreground"
+                        >
+                          Report Post
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="mb-2">
-              <PostContent content={post.content} />
-            </div>
+            
+            {/* Edit mode */}
+            {isEditing ? (
+              <div className="space-y-3">
+                <textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  className="w-full bg-accent/50 border rounded-lg p-3 text-sm min-h-[150px]"
+                />
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={() => setIsEditing(false)}
+                    className="px-4 py-2 text-sm font-bold hover:bg-accent rounded-lg"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleEditPost}
+                    disabled={!editContent.trim()}
+                    className="px-4 py-2 bg-[var(--primary)] text-white text-sm font-bold rounded-lg hover:bg-[var(--primary-dark)] disabled:opacity-50"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="mb-4">
+                  <PostContent content={post.content} />
+                </div>
+                
+                {/* Action bar */}
+                <div className="flex items-center gap-1 pt-3 border-t border-border/50">
+                  <div className="flex items-center gap-1.5 px-2 py-1.5 text-muted-foreground text-xs font-bold">
+                    <MessageSquare size={16} />
+                    <span>{totalComments} comments</span>
+                  </div>
+                  
+                  <button className="flex items-center gap-1.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground hover:text-foreground text-xs font-bold">
+                    <Share2 size={16} />
+                    <span>Share</span>
+                  </button>
+                  
+                  <div className="flex items-center">
+                    <SavePostButton post={post} size="sm" />
+                  </div>
+                  
+                  <div className="flex items-center">
+                    <ZapButton 
+                      targetPubkey={post.pubkey} 
+                      eventId={post.id}
+                      size="sm"
+                      showText={true}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
