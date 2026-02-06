@@ -2,15 +2,26 @@ import React, { useState, useEffect } from "react";
 import { Home, LogIn, Menu, X, Search, User, Settings, Bell, Compass, Palette } from "lucide-react";
 import { useNostr } from "../../providers/NostrProvider";
 import { useNavigate } from "react-router-dom";
-import { NDKEvent } from "@nostr-dev-kit/ndk";
+import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
 import { BottomNav } from "./BottomNav";
 import { LoginModal } from "../LoginModal";
 import { ThemeModal } from "../ThemeModal";
+import { useCommunityMembership } from "../../hooks/useCommunityMembership";
+import { logger } from "../../lib/logger";
 
 interface Community {
   id: string;
   pubkey: string;
   name: string;
+}
+
+interface TrendingCommunity extends Community {
+  description: string;
+  memberCount: number;
+  weeklyPosts: number;
+  activeAuthors: number;
+  score: number;
+  createdAt: number;
 }
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -310,30 +321,228 @@ const SidebarItem: React.FC<{ icon: React.ReactNode; label: string; onClick: () 
   </div>
 );
 
-const TrendingCommunities: React.FC = () => (
-  <div className="bg-card border rounded-xl overflow-hidden shadow-sm">
-    <div className="h-12 bg-[var(--primary)] flex items-center px-4">
-      <h3 className="font-black text-white text-xs uppercase tracking-widest leading-none">Trending Communities</h3>
+const TrendingCommunities: React.FC = () => {
+  const { ndk, user } = useNostr();
+  const navigate = useNavigate();
+  const { isMember, joinCommunity, leaveCommunity } = useCommunityMembership();
+  const [communities, setCommunities] = useState<TrendingCommunity[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [joiningId, setJoiningId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const loadTrendingCommunities = async () => {
+      setIsLoading(true);
+
+      try {
+        const [communityEvents, membershipEvents, recentPosts] = await Promise.all([
+          ndk.fetchEvents({ kinds: [34550 as any], limit: 100 }, { closeOnEose: true }),
+          ndk.fetchEvents(
+            { kinds: [30001], "#d": ["communities"], limit: 1000 },
+            { closeOnEose: true }
+          ),
+          ndk.fetchEvents({ kinds: [NDKKind.Text], limit: 1500 }, { closeOnEose: true }),
+        ]);
+
+        const communityList = Array.from(communityEvents).map((event) => {
+          const id = event.tags.find((tag) => tag[0] === "d")?.[1] || event.id;
+          const name = event.tags.find((tag) => tag[0] === "name")?.[1] || "Unnamed";
+          const description = event.tags.find((tag) => tag[0] === "description")?.[1] || "";
+
+          return {
+            id,
+            pubkey: event.pubkey,
+            name,
+            description,
+            memberCount: 0,
+            weeklyPosts: 0,
+            activeAuthors: 0,
+            score: 0,
+            createdAt: event.created_at || 0,
+          } satisfies TrendingCommunity;
+        });
+
+        const latestMembershipByAuthor = new Map<string, NDKEvent>();
+        Array.from(membershipEvents).forEach((event) => {
+          const existing = latestMembershipByAuthor.get(event.pubkey);
+          if (!existing || (event.created_at || 0) > (existing.created_at || 0)) {
+            latestMembershipByAuthor.set(event.pubkey, event);
+          }
+        });
+
+        const memberCounts = new Map<string, number>();
+        latestMembershipByAuthor.forEach((event) => {
+          event.tags
+            .filter((tag) => tag[0] === "a" && tag[1]?.startsWith("34550:"))
+            .forEach((tag) => {
+              const atag = tag[1];
+              memberCounts.set(atag, (memberCounts.get(atag) || 0) + 1);
+            });
+        });
+
+        const sevenDaysAgo = Math.floor(Date.now() / 1000) - 7 * 24 * 60 * 60;
+        const communityActivity = new Map<string, { posts: number; authors: Set<string> }>();
+
+        Array.from(recentPosts).forEach((event) => {
+          const createdAt = event.created_at || 0;
+          if (createdAt < sevenDaysAgo) return;
+
+          const communityTag = event.tags.find((tag) => tag[0] === "a" && tag[1]?.startsWith("34550:"))?.[1];
+          if (!communityTag) return;
+
+          const existing = communityActivity.get(communityTag) || { posts: 0, authors: new Set<string>() };
+          existing.posts += 1;
+          existing.authors.add(event.pubkey);
+          communityActivity.set(communityTag, existing);
+        });
+
+        const withStats = communityList
+          .map((community) => {
+            const atag = `34550:${community.pubkey}:${community.id}`;
+            const members = memberCounts.get(atag) || 0;
+            const activity = communityActivity.get(atag);
+            const weeklyPosts = activity?.posts || 0;
+            const activeAuthors = activity?.authors.size || 0;
+            const score = weeklyPosts * 2 + activeAuthors + Math.min(members, 100) * 0.1;
+
+            return {
+              ...community,
+              memberCount: members,
+              weeklyPosts,
+              activeAuthors,
+              score,
+            };
+          })
+          .sort((a, b) => {
+            if (b.score !== a.score) return b.score - a.score;
+            if (b.weeklyPosts !== a.weeklyPosts) return b.weeklyPosts - a.weeklyPosts;
+            return b.createdAt - a.createdAt;
+          });
+
+        const fallbackList = [...withStats]
+          .sort((a, b) => b.createdAt - a.createdAt)
+          .slice(0, 5);
+
+        const trendingList = withStats.filter((community) => community.score > 0).slice(0, 5);
+        if (isActive) {
+          setCommunities(trendingList.length > 0 ? trendingList : fallbackList);
+        }
+      } catch (error) {
+        logger.error("Failed to load trending communities", error);
+        if (isActive) {
+          setCommunities([]);
+        }
+      } finally {
+        if (isActive) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void loadTrendingCommunities();
+
+    return () => {
+      isActive = false;
+    };
+  }, [ndk]);
+
+  const handleJoinToggle = async (event: React.MouseEvent<HTMLButtonElement>, community: TrendingCommunity) => {
+    event.stopPropagation();
+
+    if (!user) {
+      navigate("/communities");
+      return;
+    }
+
+    const key = `${community.pubkey}:${community.id}`;
+    const alreadyMember = isMember(community.pubkey, community.id);
+
+    setJoiningId(key);
+    try {
+      const ok = alreadyMember
+        ? await leaveCommunity(community.pubkey, community.id)
+        : await joinCommunity(community.pubkey, community.id);
+
+      if (ok) {
+        setCommunities((prev) =>
+          prev.map((item) => {
+            if (item.pubkey !== community.pubkey || item.id !== community.id) return item;
+            const nextCount = alreadyMember
+              ? Math.max(0, item.memberCount - 1)
+              : item.memberCount + 1;
+            return { ...item, memberCount: nextCount };
+          })
+        );
+      }
+    } finally {
+      setJoiningId(null);
+    }
+  };
+
+  return (
+    <div className="bg-card border rounded-xl overflow-hidden shadow-sm">
+      <div className="h-12 bg-[var(--primary)] flex items-center px-4">
+        <h3 className="font-black text-white text-xs uppercase tracking-widest leading-none">Trending Communities</h3>
+      </div>
+      <div className="p-4 space-y-4">
+        {isLoading ? (
+          <div className="text-xs text-muted-foreground">Loading communities...</div>
+        ) : communities.length === 0 ? (
+          <div className="text-xs text-muted-foreground">No community activity yet.</div>
+        ) : (
+          communities.map((community, index) => {
+            const key = `${community.pubkey}:${community.id}`;
+            const joined = isMember(community.pubkey, community.id);
+            const isJoining = joiningId === key;
+            const statsLabel = community.weeklyPosts > 0
+              ? `${community.weeklyPosts} posts / 7d`
+              : `${community.memberCount} members`;
+
+            return (
+              <div
+                key={key}
+                onClick={() => navigate(`/community/${community.pubkey}/${community.id}`)}
+                className="flex items-center justify-between group cursor-pointer"
+              >
+                <div className="flex items-center space-x-3 min-w-0">
+                  <div className="w-9 h-9 bg-accent rounded-full border flex items-center justify-center font-bold text-xs shrink-0">
+                    {index + 1}
+                  </div>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-sm font-bold group-hover:text-[var(--primary)] transition-colors truncate">
+                      r/{community.name}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground truncate">
+                      {statsLabel}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={(event) => void handleJoinToggle(event, community)}
+                  disabled={isJoining}
+                  className={`px-4 py-1.5 rounded-full text-[11px] font-bold transition-all shrink-0 ${
+                    joined
+                      ? "bg-accent text-foreground hover:bg-accent/80"
+                      : "bg-foreground text-background hover:opacity-90"
+                  } ${isJoining ? "opacity-60 cursor-not-allowed" : "active:scale-95"}`}
+                >
+                  {isJoining ? "..." : joined ? "Joined" : "Join"}
+                </button>
+              </div>
+            );
+          })
+        )}
+        <button
+          onClick={() => navigate("/communities")}
+          className="w-full mt-2 py-2 text-xs font-bold bg-accent hover:bg-accent/80 rounded-lg transition-colors"
+        >
+          View All
+        </button>
+      </div>
     </div>
-    <div className="p-4 space-y-4">
-      {[1, 2, 3, 4, 5].map((i) => (
-        <div key={i} className="flex items-center justify-between group cursor-pointer">
-          <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 bg-accent rounded-full border flex items-center justify-center font-bold text-xs shrink-0">
-              {i}
-            </div>
-            <div className="flex flex-col min-w-0">
-              <span className="text-sm font-bold group-hover:text-[var(--primary)] transition-colors truncate">r/community_{i}</span>
-              <span className="text-[11px] text-muted-foreground">12.{i}k members</span>
-            </div>
-          </div>
-          <button className="px-4 py-1.5 bg-foreground text-background rounded-full text-[11px] font-bold hover:opacity-90 active:scale-95 transition-all shrink-0">Join</button>
-        </div>
-      ))}
-      <button className="w-full mt-2 py-2 text-xs font-bold bg-accent hover:bg-accent/80 rounded-lg transition-colors">View All</button>
-    </div>
-  </div>
-);
+  );
+};
 
 const NostrGuide: React.FC = () => (
   <div className="bg-card border rounded-xl p-5 shadow-sm space-y-4">
