@@ -234,24 +234,29 @@ export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
             alt="Preview"
             className="w-full h-full object-contain"
             onError={(e) => {
-              const normalized = normalizeImageUrl(imageUrl);
-              console.log('[ImageUpload] Preview image error for:', normalized);
+              const currentSrc = e.currentTarget.src;
+              console.log('[ImageUpload] Preview image error for:', currentSrc);
               
               // Try PNG fallback for Imgur
-              if (normalized.includes('i.imgur.com') && normalized.endsWith('.jpg')) {
-                const pngUrl = normalized.replace('.jpg', '.png');
+              if (currentSrc.endsWith('.jpg') || currentSrc.endsWith('.jpeg')) {
+                const pngUrl = currentSrc.replace(/\.(jpg|jpeg)$/, '.png');
                 console.log('[ImageUpload] Trying PNG fallback:', pngUrl);
-                const img = e.currentTarget;
-                img.src = pngUrl;
+                e.currentTarget.src = pngUrl;
                 return;
               }
               
               // Try without extension for Imgur
-              if (normalized.includes('i.imgur.com')) {
-                const noExtUrl = normalized.replace(/\.(jpg|png)$/, '');
+              if (currentSrc.includes('i.imgur.com') && !currentSrc.match(/\.[a-z]{3,4}$/)) {
+                // Already no extension, give up
+                console.log('[ImageUpload] Already no extension, giving up');
+                setPreviewFailed(true);
+                return;
+              }
+              
+              if (currentSrc.includes('i.imgur.com')) {
+                const noExtUrl = currentSrc.replace(/\.[a-z]{3,4}$/, '');
                 console.log('[ImageUpload] Trying no-extension fallback:', noExtUrl);
-                const img = e.currentTarget;
-                img.src = noExtUrl;
+                e.currentTarget.src = noExtUrl;
                 return;
               }
               
