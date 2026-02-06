@@ -382,6 +382,21 @@ export function PostDetailPage() {
   };
 
   const isOwnPost = user && post && post.pubkey === user.pubkey;
+  const actionsMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (actionsMenuRef.current && !actionsMenuRef.current.contains(event.target as Node)) {
+        setShowActionsMenu(false);
+      }
+    };
+    
+    if (showActionsMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showActionsMenu]);
 
   const getTotalCommentCount = (commentList: Comment[]): number => {
     return commentList.reduce((acc, comment) => {
@@ -455,7 +470,7 @@ export function PostDetailPage() {
               <span>{new Date((post.created_at || 0) * 1000).toLocaleString()}</span>
               
               {/* Actions menu */}
-              <div className="relative ml-auto">
+              <div className="relative ml-auto" ref={actionsMenuRef}>
                 <button
                   onClick={() => setShowActionsMenu(!showActionsMenu)}
                   className="p-1.5 hover:bg-accent rounded-full transition-colors"

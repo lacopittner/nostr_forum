@@ -1,6 +1,6 @@
 import { NostrProvider, useNostr } from "./providers/NostrProvider";
 import { AppShell } from "./components/layout/AppShell";
-import { ArrowBigUp, ArrowBigDown, MessageSquare, Share2, MoreHorizontal, Send, AlertCircle, Loader2 } from "lucide-react";
+import { ArrowBigUp, ArrowBigDown, MessageSquare, Share2, MoreHorizontal, Send, AlertCircle, Loader2, Edit3, Trash2 } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
 import { BrowserRouter as Router, Routes, Route, useNavigate } from "react-router-dom";
@@ -38,6 +38,8 @@ function Feed() {
   const [postError, setPostError] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyContent, setReplyContent] = useState("");
+  const [postActionMenuOpen, setPostActionMenuOpen] = useState<string | null>(null);
+  const actionMenuRef = useRef<HTMLDivElement>(null);
   const [profiles, setProfiles] = useState<Record<string, NDKProfile>>({});
   const [commentCounts] = useState<Record<string, number>>({});
   const [sortBy, setSortBy] = useState<"hot" | "new" | "top">("new");
@@ -554,12 +556,59 @@ function Feed() {
                         />
                       </div>
                       
-                      <button 
+                      {/* 3-dot menu */}
+                      <div 
+                        className="relative ml-auto" 
+                        ref={postActionMenuOpen === post.id ? actionMenuRef : undefined}
                         onClick={(e) => e.stopPropagation()}
-                        className="p-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground ml-auto"
                       >
-                        <MoreHorizontal size={16} />
-                      </button>
+                        <button 
+                          onClick={() => setPostActionMenuOpen(postActionMenuOpen === post.id ? null : post.id)}
+                          className="p-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground"
+                        >
+                          <MoreHorizontal size={16} />
+                        </button>
+                        
+                        {postActionMenuOpen === post.id && (
+                          <div className="absolute right-0 bottom-full mb-1 w-36 bg-card border rounded-lg shadow-lg z-10 py-1">
+                            {user?.pubkey === post.pubkey ? (
+                              <>
+                                <button
+                                  onClick={() => {
+                                    navigate(`/post/${post.id}`);
+                                    setPostActionMenuOpen(null);
+                                  }}
+                                  className="w-full px-3 py-2 text-left text-xs hover:bg-accent flex items-center gap-2"
+                                >
+                                  <Edit3 size={12} />
+                                  Edit Post
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    alert("Delete coming soon - use post detail page");
+                                    setPostActionMenuOpen(null);
+                                  }}
+                                  className="w-full px-3 py-2 text-left text-xs hover:bg-accent text-red-500 flex items-center gap-2"
+                                >
+                                  <Trash2 size={12} />
+                                  Delete Post
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(`${window.location.origin}/post/${post.id}`);
+                                  setPostActionMenuOpen(null);
+                                }}
+                                className="w-full px-3 py-2 text-left text-xs hover:bg-accent flex items-center gap-2"
+                              >
+                                <Share2 size={12} />
+                                Share Post
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {/* Reply form */}
