@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
 import { TrendingUp, Hash, Users, ArrowRight, Flame } from "lucide-react";
 import { useNostr } from "../providers/NostrProvider";
+import { useGlobalBlocks } from "../hooks/useGlobalBlocks";
 import { EmptyState } from "../components/EmptyState";
 import { logger } from "../lib/logger";
 
@@ -13,6 +14,7 @@ interface TrendingHashtag {
 
 interface TrendingCommunity {
   id: string;
+  pubkey: string;
   name: string;
   description: string;
   memberCount: number;
@@ -24,6 +26,7 @@ export function ExplorePage() {
   const [trendingTags, setTrendingTags] = useState<TrendingHashtag[]>([]);
   const [trendingCommunities, setTrendingCommunities] = useState<TrendingCommunity[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const { blockedPubkeys } = useGlobalBlocks();
 
   useEffect(() => {
     const loadTrending = async () => {
@@ -38,6 +41,7 @@ export function ExplorePage() {
         // Count hashtags
         const tagCounts = new Map<string, number>();
         Array.from(events).forEach((event: NDKEvent) => {
+          if (blockedPubkeys.has(event.pubkey)) return;
           event.tags
             .filter((tag) => tag[0] === "t")
             .forEach((tag) => {
@@ -61,10 +65,12 @@ export function ExplorePage() {
         );
 
         const communities = Array.from(communityEvents).map((event: NDKEvent) => {
+          const d = event.tags.find((t) => t[0] === "d")?.[1] || event.id;
           const name = event.tags.find((t) => t[0] === "name")?.[1] || "Unnamed";
           const description = event.tags.find((t) => t[0] === "description")?.[1] || "";
           return {
-            id: event.id,
+            id: d,
+            pubkey: event.pubkey,
             name,
             description,
             memberCount: Math.floor(Math.random() * 1000) + 10, // Placeholder
@@ -80,7 +86,7 @@ export function ExplorePage() {
     };
 
     loadTrending();
-  }, [ndk]);
+  }, [ndk, blockedPubkeys]);
 
   if (isLoading) {
     return (
@@ -151,9 +157,9 @@ export function ExplorePage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {trendingCommunities.map((community) => (
-            <button
-              key={community.id}
-              onClick={() => navigate(`/community/${community.id}`)}
+              <button
+              key={`${community.pubkey}:${community.id}`}
+              onClick={() => navigate(`/community/${community.pubkey}/${community.id}`)}
               className="text-left p-4 bg-accent/30 hover:bg-accent/50 rounded-xl transition-all border border-transparent hover:border-[var(--primary)]/20"
             >
               <div className="flex items-center gap-3 mb-2">

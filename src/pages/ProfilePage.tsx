@@ -6,6 +6,7 @@ import { ArrowBigUp, ArrowBigDown, ArrowLeft, Bookmark } from "lucide-react";
 import { useSavedPosts } from "../hooks/useSavedPosts";
 import { useFollows } from "../hooks/useFollows";
 import { useNip05 } from "../hooks/useNip05";
+import { useGlobalBlocks } from "../hooks/useGlobalBlocks";
 import { ZapButton } from "../components/ZapButton";
 import { FollowButton } from "../components/FollowButton";
 import { EmptyState } from "../components/EmptyState";
@@ -18,6 +19,7 @@ export function ProfilePage() {
   const { savedPosts, unsavePost } = useSavedPosts();
   const { followingCount, followersCount } = useFollows();
   const { verification, checkProfileNip05 } = useNip05();
+  const { blockedPubkeys } = useGlobalBlocks();
   const [profile, setProfile] = useState<NDKProfile | null>(null);
   const [posts, setPosts] = useState<NDKEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -27,9 +29,15 @@ export function ProfilePage() {
 
   const profilePubkey = paramPubkey || user?.pubkey;
   const isOwnProfile = user?.pubkey === profilePubkey;
+  const isGloballyBlockedProfile = !!profilePubkey && !isOwnProfile && blockedPubkeys.has(profilePubkey);
 
   useEffect(() => {
     if (!profilePubkey || !ndk) return;
+    if (isGloballyBlockedProfile) {
+      setIsLoading(false);
+      setPosts([]);
+      return;
+    }
 
     setIsLoading(true);
     seenEventIds.current.clear();
@@ -61,7 +69,7 @@ export function ProfilePage() {
     return () => {
       postSub.stop();
     };
-  }, [profilePubkey, ndk, user]);
+  }, [profilePubkey, ndk, user, isGloballyBlockedProfile]);
 
   // Check NIP-05 verification when profile loads
   useEffect(() => {
@@ -74,6 +82,23 @@ export function ProfilePage() {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-muted-foreground">Loading profile...</div>
+      </div>
+    );
+  }
+
+  if (isGloballyBlockedProfile) {
+    return (
+      <div className="space-y-6">
+        <button
+          onClick={() => navigate("/")}
+          className="flex items-center gap-2 text-[var(--primary)] hover:text-[var(--primary-dark)] font-bold"
+        >
+          <ArrowLeft size={20} />
+          Back
+        </button>
+        <div className="bg-card border rounded-xl p-8 text-center shadow-sm">
+          <p className="text-muted-foreground">This profile is hidden because the user is globally blocked.</p>
+        </div>
       </div>
     );
   }

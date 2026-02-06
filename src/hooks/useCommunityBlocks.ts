@@ -16,12 +16,19 @@ export function useCommunityBlocks(community: NDKEvent | null) {
       return;
     }
 
+    const authorizedModerators = new Set<string>([
+      community.pubkey,
+      ...community.tags
+        .filter(t => t[0] === "p" && t[3] === "moderator")
+        .map(t => t[1]),
+    ]);
+
     setIsLoading(true);
     const sub = ndk.subscribe(
       {
         kinds: [34551 as any],
-        authors: [community.pubkey],
-        "#a": [communityId]
+        "#a": [communityId],
+        limit: 500,
       },
       { closeOnEose: true }
     );
@@ -29,8 +36,9 @@ export function useCommunityBlocks(community: NDKEvent | null) {
     const blocks: Array<{ pubkey: string; type: string; created_at: number }> = [];
 
     sub.on("event", (event: NDKEvent) => {
+      if (!authorizedModerators.has(event.pubkey)) return;
       const blockedPubkey = event.tags.find(t => t[0] === "p")?.[1];
-      const blockType = event.tags.find(t => t[0] === "e")?.[1] || "block";
+      const blockType = (event.tags.find(t => t[0] === "e")?.[1] || "block").toLowerCase();
       if (blockedPubkey) {
         blocks.push({
           pubkey: blockedPubkey,

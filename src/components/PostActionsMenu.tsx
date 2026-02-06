@@ -1,16 +1,31 @@
 import { useState } from "react";
 import { useNostr } from "../providers/NostrProvider";
 import { NDKEvent } from "@nostr-dev-kit/ndk";
-import { Pencil, Trash2, MoreHorizontal, X, Check } from "lucide-react";
+import { Pencil, Trash2, MoreHorizontal, X, Check, UserX } from "lucide-react";
 
 interface PostActionsMenuProps {
   post: NDKEvent;
-  onEdit?: (postId: string, newContent: string) => void;
-  onDelete?: (postId: string) => void;
+  onEdit?: (postId: string, newContent: string) => Promise<void> | void;
+  onDelete?: (postId: string) => Promise<void> | void;
+  onApprove?: (postId: string) => Promise<void> | void;
+  onReject?: (postId: string) => Promise<void> | void;
+  onBanUser?: (pubkey: string) => Promise<void> | void;
+  moderationState?: "approved" | "rejected" | "pending";
+  canModerate?: boolean;
   isComment?: boolean;
 }
 
-export function PostActionsMenu({ post, onEdit, onDelete, isComment = false }: PostActionsMenuProps) {
+export function PostActionsMenu({
+  post,
+  onEdit,
+  onDelete,
+  onApprove,
+  onReject,
+  onBanUser,
+  moderationState = "approved",
+  canModerate = false,
+  isComment = false,
+}: PostActionsMenuProps) {
   const { user } = useNostr();
   const [isOpen, setIsOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -18,10 +33,16 @@ export function PostActionsMenu({ post, onEdit, onDelete, isComment = false }: P
   const [isProcessing, setIsProcessing] = useState(false);
 
   const isOwner = user?.pubkey === post.pubkey;
+  const canDelete = Boolean(onDelete && (isOwner || canModerate));
+  const canEdit = Boolean(onEdit && isOwner);
+  const canBan = Boolean(canModerate && onBanUser && user?.pubkey !== post.pubkey);
+  const canApprove = Boolean(canModerate && onApprove);
+  const canReject = Boolean(canModerate && onReject);
 
-  if (!isOwner) return null;
+  if (!isOwner && !canModerate) return null;
 
   const handleEdit = async () => {
+    if (!onEdit) return;
     if (!editContent.trim() || editContent === post.content) {
       setIsEditing(false);
       return;
@@ -29,7 +50,7 @@ export function PostActionsMenu({ post, onEdit, onDelete, isComment = false }: P
 
     setIsProcessing(true);
     try {
-      await onEdit?.(post.id, editContent);
+      await onEdit(post.id, editContent);
       setIsEditing(false);
     } finally {
       setIsProcessing(false);
@@ -37,13 +58,46 @@ export function PostActionsMenu({ post, onEdit, onDelete, isComment = false }: P
   };
 
   const handleDelete = async () => {
+    if (!canDelete || !onDelete) return;
     if (!confirm(`Are you sure you want to delete this ${isComment ? "comment" : "post"}?`)) {
       return;
     }
 
     setIsProcessing(true);
     try {
-      await onDelete?.(post.id);
+      await onDelete(post.id);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleApprove = async () => {
+    if (!onApprove) return;
+    setIsProcessing(true);
+    try {
+      await onApprove(post.id);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!onReject) return;
+    setIsProcessing(true);
+    try {
+      await onReject(post.id);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleBan = async () => {
+    if (!onBanUser) return;
+    if (!confirm("Ban this user from the community?")) return;
+
+    setIsProcessing(true);
+    try {
+      await onBanUser(post.pubkey);
     } finally {
       setIsProcessing(false);
     }
@@ -103,28 +157,79 @@ export function PostActionsMenu({ post, onEdit, onDelete, isComment = false }: P
             onClick={() => setIsOpen(false)}
           />
           <div className="absolute right-0 top-full mt-1 w-32 bg-card border rounded-lg shadow-lg z-50 overflow-hidden">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsEditing(true);
-                setIsOpen(false);
-              }}
-              className="w-full px-3 py-2 text-left text-sm hover:bg-accent transition-colors flex items-center gap-2"
-            >
-              <Pencil size={14} />
-              Edit
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDelete();
-                setIsOpen(false);
-              }}
-              className="w-full px-3 py-2 text-left text-sm hover:bg-accent transition-colors text-red-500 flex items-center gap-2"
-            >
-              <Trash2 size={14} />
-              Delete
-            </button>
+            {canEdit && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsEditing(true);
+                  setIsOpen(false);
+                }}
+                className="w-full px-3 py-2 text-left text-sm hover:bg-accent transition-colors flex items-center gap-2"
+              >
+                <Pencil size={14} />
+                Edit
+              </button>
+            )}
+
+            {canDelete && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void handleDelete();
+                  setIsOpen(false);
+                }}
+                className="w-full px-3 py-2 text-left text-sm hover:bg-accent transition-colors text-red-500 flex items-center gap-2"
+              >
+                <Trash2 size={14} />
+                {canModerate && !isOwner ? "Remove" : "Delete"}
+              </button>
+            )}
+
+            {(canApprove || canReject || canBan) && (
+              <div className="border-t border-border/50 my-1" />
+            )}
+
+            {canApprove && moderationState !== "approved" && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void handleApprove();
+                  setIsOpen(false);
+                }}
+                className="w-full px-3 py-2 text-left text-sm hover:bg-accent transition-colors flex items-center gap-2"
+              >
+                <Check size={14} />
+                Approve
+              </button>
+            )}
+
+            {canReject && moderationState !== "rejected" && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void handleReject();
+                  setIsOpen(false);
+                }}
+                className="w-full px-3 py-2 text-left text-sm hover:bg-accent transition-colors flex items-center gap-2"
+              >
+                <X size={14} />
+                Reject
+              </button>
+            )}
+
+            {canBan && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void handleBan();
+                  setIsOpen(false);
+                }}
+                className="w-full px-3 py-2 text-left text-sm hover:bg-accent transition-colors text-red-500 flex items-center gap-2"
+              >
+                <UserX size={14} />
+                Ban User
+              </button>
+            )}
           </div>
         </>
       )}

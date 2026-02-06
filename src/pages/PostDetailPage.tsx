@@ -2,9 +2,10 @@ import { useNostr } from "../providers/NostrProvider";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
-import { ArrowLeft, ArrowBigUp, ArrowBigDown, MessageSquare, Send, AlertCircle, Loader2, MoreHorizontal, Share2, Trash2, Edit3 } from "lucide-react";
+import { ArrowLeft, ArrowBigUp, ArrowBigDown, MessageSquare, Send, AlertCircle, Loader2, MoreHorizontal, Share2, Trash2, Edit3, UserX } from "lucide-react";
 import { CommentThread } from "../components/CommentThread";
 import { useVoting } from "../hooks/useVoting";
+import { useGlobalBlocks } from "../hooks/useGlobalBlocks";
 import { PostContent } from "../components/PostContent";
 import { ZapButton } from "../components/ZapButton";
 import { SavePostButton } from "../components/SavePostButton";
@@ -21,6 +22,7 @@ export function PostDetailPage() {
   const { postId } = useParams<{ postId: string }>();
   const navigate = useNavigate();
   const { success, error: showError } = useToast();
+  const { blockedPubkeys, isBlocked, blockUser, unblockUser } = useGlobalBlocks();
   
   const [post, setPost] = useState<NDKEvent | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -95,6 +97,7 @@ export function PostDetailPage() {
     );
 
     commentSub.on("event", (event: NDKEvent) => {
+      if (isBlocked(event.pubkey)) return;
       if (seenEventIds.current.has(event.id)) return;
       seenEventIds.current.add(event.id);
       
@@ -134,7 +137,7 @@ export function PostDetailPage() {
     return () => {
       commentSub.stop();
     };
-  }, [ndk, postId, fetchProfile, processIncomingReaction, processIncomingDeletion]);
+  }, [ndk, postId, fetchProfile, processIncomingReaction, processIncomingDeletion, isBlocked]);
 
   const buildCommentTree = () => {
     const commentList = Array.from(commentsMap.current.values());
@@ -188,6 +191,18 @@ export function PostDetailPage() {
   useEffect(() => {
     buildCommentTree();
   }, [sortBy, reactions]);
+
+  useEffect(() => {
+    if (blockedPubkeys.size === 0) return;
+
+    for (const [id, event] of commentsMap.current.entries()) {
+      if (blockedPubkeys.has(event.pubkey)) {
+        commentsMap.current.delete(id);
+      }
+    }
+
+    buildCommentTree();
+  }, [blockedPubkeys]);
 
   const handleReply = async (parentId?: string, parentPubkey?: string, content?: string) => {
     const replyText = content || replyContent;
@@ -359,22 +374,33 @@ export function PostDetailPage() {
       return;
     }
     
-    if (!editContent.trim()) return;
+    const trimmedContent = editContent.trim();
+    if (!trimmedContent || trimmedContent === post.content.trim()) return;
     
     try {
-      const editEvent = new NDKEvent(ndk);
-      editEvent.kind = NDKKind.Text;
-      editEvent.content = editContent;
-      editEvent.tags = post.tags.filter(t => t[0] !== "e"); // Keep all tags except thread refs
-      
-      await editEvent.publish();
-      // Update the post content directly on the existing object
-      if (post) {
-        post.content = editContent;
-        setPost(post); // Use same object to preserve type
-      }
+      const deletion = new NDKEvent(ndk);
+      deletion.kind = 5;
+      deletion.content = "Post replaced by edited version";
+      deletion.tags = [["e", post.id]];
+      await deletion.publish();
+
+      const replacement = new NDKEvent(ndk);
+      replacement.kind = NDKKind.Text;
+      replacement.content = trimmedContent;
+      replacement.tags = [
+        ...post.tags.filter(t => t[0] !== "edited"),
+        ["edited", post.id, new Date().toISOString()],
+      ];
+
+      await replacement.publish();
+
+      setPost(replacement);
       setIsEditing(false);
+      setComments([]);
+      commentsMap.current.clear();
+      seenEventIds.current.clear();
       success("Post updated");
+      navigate(`/post/${replacement.id}`, { replace: true });
     } catch (error) {
       logger.error("Failed to edit post", error);
       showError("Failed to edit post");
@@ -382,7 +408,28 @@ export function PostDetailPage() {
   };
 
   const isOwnPost = user && post && post.pubkey === user.pubkey;
+  const isPostAuthorBlocked = post ? isBlocked(post.pubkey) : false;
   const actionsMenuRef = useRef<HTMLDivElement>(null);
+
+  const handleToggleGlobalBlock = async () => {
+    if (!post || !user) return;
+
+    const targetPubkey = post.pubkey;
+    if (targetPubkey === user.pubkey) {
+      showError("You cannot block your own account");
+      return;
+    }
+
+    if (isBlocked(targetPubkey)) {
+      const ok = await unblockUser(targetPubkey);
+      if (ok) success("User unblocked globally");
+      else showError("Failed to unblock user");
+    } else {
+      const ok = await blockUser(targetPubkey);
+      if (ok) success("User blocked globally");
+      else showError("Failed to block user");
+    }
+  };
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -422,6 +469,29 @@ export function PostDetailPage() {
         >
           Go Back
         </button>
+      </div>
+    );
+  }
+
+  if (isPostAuthorBlocked) {
+    return (
+      <div className="space-y-6">
+        <button
+          onClick={() => navigate(-1)}
+          className="flex items-center space-x-2 text-[var(--primary)] hover:text-[var(--primary)] transition-colors"
+        >
+          <ArrowLeft size={20} />
+          <span>Back</span>
+        </button>
+        <div className="bg-card border rounded-xl p-8 text-center shadow-sm">
+          <p className="text-muted-foreground mb-4">This post is hidden because the author is globally blocked.</p>
+          <button
+            onClick={() => void handleToggleGlobalBlock()}
+            className="px-4 py-2 bg-[var(--primary)] text-white rounded-lg font-bold hover:bg-[var(--primary-dark)]"
+          >
+            Unblock Author
+          </button>
+        </div>
       </div>
     );
   }
@@ -603,6 +673,16 @@ export function PostDetailPage() {
                               className="w-full px-4 py-2 text-left text-sm hover:bg-accent text-muted-foreground"
                             >
                               Report Post
+                            </button>
+                            <button
+                              onClick={() => {
+                                void handleToggleGlobalBlock();
+                                setShowActionsMenu(false);
+                              }}
+                              className="w-full px-4 py-2 text-left text-sm hover:bg-accent text-red-500 flex items-center gap-2"
+                            >
+                              <UserX size={14} />
+                              {isBlocked(post.pubkey) ? "Unblock User" : "Block User"}
                             </button>
                           </>
                         )}

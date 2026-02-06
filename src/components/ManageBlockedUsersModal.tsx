@@ -37,44 +37,53 @@ export function ManageBlockedUsersModal({ community, exit }: ManageBlockedUsersM
   const fetchBlockedUsers = async () => {
     setIsLoading(true);
     try {
+      const authorizedModerators = new Set<string>([
+        community.pubkey,
+        ...community.tags
+          .filter(t => t[0] === "p" && t[3] === "moderator")
+          .map(t => t[1]),
+      ]);
+
       // Subscribe to block events for this community
       const sub = ndk.subscribe(
         {
           kinds: [COMMUNITY_BLOCK_KIND],
-          authors: [community.pubkey], // Only blocks by owner
-          "#a": [communityId]
+          "#a": [communityId],
+          limit: 500,
         },
         { closeOnEose: true }
       );
 
-      const blocks: Array<{ pubkey: string; reason: string; blocked_at: number; eventId: string }> = [];
+      const blocks: Array<{ pubkey: string; reason: string; blocked_at: number; type: string }> = [];
       
       sub.on("event", (event: NDKEvent) => {
+        if (!authorizedModerators.has(event.pubkey)) return;
         const blockedPubkey = event.tags.find(t => t[0] === "p")?.[1];
         if (blockedPubkey) {
           blocks.push({
             pubkey: blockedPubkey,
             reason: event.content || "No reason given",
             blocked_at: event.created_at || 0,
-            eventId: event.id
+            type: (event.tags.find(t => t[0] === "e")?.[1] || "block").toLowerCase(),
           });
         }
       });
 
       sub.on("eose", () => {
-        // Remove duplicates (keep latest)
-        const latestBlocks = new Map<string, { pubkey: string; reason: string; blocked_at: number }>();
+        // Remove duplicates (keep latest action) and keep only active blocks.
+        const latestBlocks = new Map<string, { pubkey: string; reason: string; blocked_at: number; type: string }>();
         blocks.forEach(block => {
           const existing = latestBlocks.get(block.pubkey);
           if (!existing || block.blocked_at > existing.blocked_at) {
-            latestBlocks.set(block.pubkey, {
-              pubkey: block.pubkey,
-              reason: block.reason,
-              blocked_at: block.blocked_at
-            });
+            latestBlocks.set(block.pubkey, block);
           }
         });
-        setBlockedUsers(Array.from(latestBlocks.values()));
+
+        setBlockedUsers(
+          Array.from(latestBlocks.values())
+            .filter(block => block.type === "block")
+            .map(({ pubkey, reason, blocked_at }) => ({ pubkey, reason, blocked_at }))
+        );
         setIsLoading(false);
       });
     } catch (error) {

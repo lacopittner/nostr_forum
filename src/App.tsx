@@ -23,6 +23,7 @@ import { useVoting } from "./hooks/useVoting";
 import { useFollows } from "./hooks/useFollows";
 import { useRateLimit } from "./hooks/useRateLimit";
 import { usePullToRefresh } from "./hooks/usePullToRefresh";
+import { useGlobalBlocks } from "./hooks/useGlobalBlocks";
 import { logger } from "./lib/logger";
 import { useToast } from "./lib/toast";
 
@@ -140,6 +141,7 @@ function Feed() {
 
   // Get following list for filtering
   const { following } = useFollows();
+  const { blockedPubkeys, isBlocked } = useGlobalBlocks();
 
   // Voting - use the custom hook instead of duplicating logic
   const { reactions, userVotes, votingIds, error: votingError, handleReaction, processIncomingReaction, processIncomingDeletion } = useVoting();
@@ -202,6 +204,7 @@ function Feed() {
     );
 
     postSub.on("event", (event: NDKEvent) => {
+      if (isBlocked(event.pubkey)) return;
       if (seenEventIds.current.has(event.id)) return;
       seenEventIds.current.add(event.id);
       
@@ -221,7 +224,7 @@ function Feed() {
     return () => {
       postSub.stop();
     };
-  }, [ndk, sortBy, fetchProfile, fetchCommentCount]);
+  }, [ndk, sortBy, fetchProfile, fetchCommentCount, isBlocked]);
 
   const subscribeToReactions = (postId: string) => {
     ndk.subscribe(
@@ -257,7 +260,8 @@ function Feed() {
       
       // Filter by following if selected
       if (selectedFeedFilter === "following") {
-        if (following.size === 0) {
+        const followedAuthors = Array.from(following).filter(pubkey => !blockedPubkeys.has(pubkey));
+        if (followedAuthors.length === 0) {
           if (!loadMore) {
             setPosts([]);
           }
@@ -265,7 +269,7 @@ function Feed() {
           return;
         }
 
-        filter.authors = Array.from(following);
+        filter.authors = followedAuthors;
       }
       
       if (loadMore && until) {
@@ -276,6 +280,7 @@ function Feed() {
       
       const uniqueEvents = Array.from(fetchedEvents)
         .filter(event => {
+          if (isBlocked(event.pubkey)) return false;
           if (seenEventIds.current.has(event.id)) return false;
           seenEventIds.current.add(event.id);
           return true;
@@ -307,6 +312,10 @@ function Feed() {
       setIsLoadingMore(false);
     }
   };
+
+  useEffect(() => {
+    setPosts(prev => prev.filter(post => !blockedPubkeys.has(post.pubkey)));
+  }, [blockedPubkeys]);
 
   const resetFeedAndLoad = (nextFilter: "all" | "following") => {
     setFeedFilter(nextFilter);
