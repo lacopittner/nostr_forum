@@ -11,6 +11,7 @@ export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
   const [imageUrl, setImageUrl] = useState("");
   const [isValid, setIsValid] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
+  const [previewFailed, setPreviewFailed] = useState(false);
   const { error: showError } = useToast();
 
   // Convert various image hosting URLs to direct image links
@@ -113,6 +114,7 @@ export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
   const handleUrlChange = (value: string) => {
     console.log('[ImageUpload] URL change:', value);
     setImageUrl(value);
+    setPreviewFailed(false);
     const valid = validateUrl(value);
     console.log('[ImageUpload] Setting isValid:', valid);
     setIsValid(valid);
@@ -225,19 +227,47 @@ export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
       </div>
 
       {/* Preview */}
-      {imageUrl && isValid && (
+      {imageUrl && isValid && !previewFailed && (
         <div className="relative aspect-video bg-accent/30 rounded-lg overflow-hidden">
           <img
             src={normalizeImageUrl(imageUrl)}
             alt="Preview"
             className="w-full h-full object-contain"
             onError={(e) => {
-              console.log('[ImageUpload] Preview image error:', e);
-              console.log('[ImageUpload] Failed URL:', normalizeImageUrl(imageUrl));
-              setIsValid(false);
-              showError("Could not load image. Check the URL.");
+              const normalized = normalizeImageUrl(imageUrl);
+              console.log('[ImageUpload] Preview image error for:', normalized);
+              
+              // Try PNG fallback for Imgur
+              if (normalized.includes('i.imgur.com') && normalized.endsWith('.jpg')) {
+                const pngUrl = normalized.replace('.jpg', '.png');
+                console.log('[ImageUpload] Trying PNG fallback:', pngUrl);
+                const img = e.currentTarget;
+                img.src = pngUrl;
+                return;
+              }
+              
+              // Try without extension for Imgur
+              if (normalized.includes('i.imgur.com')) {
+                const noExtUrl = normalized.replace(/\.(jpg|png)$/, '');
+                console.log('[ImageUpload] Trying no-extension fallback:', noExtUrl);
+                const img = e.currentTarget;
+                img.src = noExtUrl;
+                return;
+              }
+              
+              console.log('[ImageUpload] All fallbacks failed, allowing use anyway');
+              setPreviewFailed(true);
             }}
           />
+        </div>
+      )}
+
+      {/* Preview failed warning */}
+      {previewFailed && (
+        <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+          <p className="text-xs text-yellow-600 dark:text-yellow-400">
+            ⚠️ Could not load preview. The image may still work when posted.
+          </p>
         </div>
       )}
 
