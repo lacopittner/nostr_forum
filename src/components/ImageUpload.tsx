@@ -15,39 +15,52 @@ export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
 
   // Convert various image hosting URLs to direct image links
   const normalizeImageUrl = (url: string): string => {
+    console.log('[ImageUpload] Normalizing URL:', url);
     try {
       const urlObj = new URL(url);
+      console.log('[ImageUpload] Parsed URL:', { hostname: urlObj.hostname, pathname: urlObj.pathname });
       
       // Imgur: imgur.com/xxx -> i.imgur.com/xxx.jpg
       if (urlObj.hostname === 'imgur.com' || urlObj.hostname === 'www.imgur.com') {
         const imageId = urlObj.pathname.replace(/^\//, '').split('/')[0];
+        console.log('[ImageUpload] Imgur gallery detected, imageId:', imageId);
         if (imageId) {
-          return `https://i.imgur.com/${imageId}.jpg`;
+          const newUrl = `https://i.imgur.com/${imageId}.jpg`;
+          console.log('[ImageUpload] Converted to:', newUrl);
+          return newUrl;
         }
       }
       
       // Imgur already direct link but missing extension
       if (urlObj.hostname === 'i.imgur.com' && !/\.(jpg|jpeg|png|gif|webp)$/i.test(urlObj.pathname)) {
-        return `${url}.jpg`;
+        const newUrl = `${url}.jpg`;
+        console.log('[ImageUpload] Added extension:', newUrl);
+        return newUrl;
       }
       
       // Gyazo: gyazo.com/xxx -> i.gyazo.com/xxx.png
       if (urlObj.hostname === 'gyazo.com' || urlObj.hostname === 'www.gyazo.com') {
         const imageId = urlObj.pathname.replace(/^\//, '').split('/')[0];
         if (imageId) {
-          return `https://i.gyazo.com/${imageId}.png`;
+          const newUrl = `https://i.gyazo.com/${imageId}.png`;
+          console.log('[ImageUpload] Gyazo converted:', newUrl);
+          return newUrl;
         }
       }
       
+      console.log('[ImageUpload] No conversion needed');
       return url;
-    } catch {
+    } catch (e) {
+      console.log('[ImageUpload] URL parse error:', e);
       return url;
     }
   };
 
   // Validate if URL looks like an image
   const validateUrl = (url: string) => {
+    console.log('[ImageUpload] Validating URL:', url);
     const normalizedUrl = normalizeImageUrl(url);
+    console.log('[ImageUpload] Normalized URL:', normalizedUrl);
     const imageExtensions = /\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)(\?.*)?$/i;
     const imageHosts = [
       "imgur.com",
@@ -82,22 +95,31 @@ export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
 
     try {
       const urlObj = new URL(normalizedUrl);
+      console.log('[ImageUpload] Validating normalized:', { hostname: urlObj.hostname, pathname: urlObj.pathname });
       const hasImageExt = imageExtensions.test(url);
       const isImageHost = imageHosts.some((host) => urlObj.hostname.includes(host));
       const hasImageInPath = urlObj.pathname.includes("/i/") || urlObj.pathname.includes("/img/");
+      
+      const result = hasImageExt || isImageHost || hasImageInPath;
+      console.log('[ImageUpload] Validation result:', { hasImageExt, isImageHost, hasImageInPath, result });
 
-      return hasImageExt || isImageHost || hasImageInPath;
-    } catch {
+      return result;
+    } catch (e) {
+      console.log('[ImageUpload] Validation error:', e);
       return false;
     }
   };
 
   const handleUrlChange = (value: string) => {
+    console.log('[ImageUpload] URL change:', value);
     setImageUrl(value);
-    setIsValid(validateUrl(value));
+    const valid = validateUrl(value);
+    console.log('[ImageUpload] Setting isValid:', valid);
+    setIsValid(valid);
   };
 
   const handleSubmit = async () => {
+    console.log('[ImageUpload] Submit clicked, url:', imageUrl);
     if (!imageUrl.trim()) {
       showError("Please enter an image URL");
       return;
@@ -107,30 +129,43 @@ export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
 
     // Normalize URL before validation
     const normalizedUrl = normalizeImageUrl(imageUrl);
+    console.log('[ImageUpload] Submit normalized URL:', normalizedUrl);
 
     // Basic validation
-    if (!validateUrl(imageUrl)) {
+    const isUrlValid = validateUrl(imageUrl);
+    console.log('[ImageUpload] Submit validation:', isUrlValid);
+    if (!isUrlValid) {
+      console.log('[ImageUpload] Validation failed, showing error');
       showError("This doesn't look like a valid image URL. Please check the link.");
       setIsChecking(false);
       return;
     }
 
     // Try to load the image to verify it exists
+    console.log('[ImageUpload] Attempting to load image:', normalizedUrl);
     try {
       await new Promise<void>((resolve, reject) => {
         const img = new Image();
-        img.onload = () => resolve();
-        img.onerror = () => reject(new Error("Failed to load image"));
+        img.onload = () => {
+          console.log('[ImageUpload] Image loaded successfully');
+          resolve();
+        };
+        img.onerror = (e) => {
+          console.log('[ImageUpload] Image failed to load:', e);
+          reject(new Error("Failed to load image"));
+        };
         img.src = normalizedUrl;
         // Timeout after 10 seconds
-        setTimeout(() => reject(new Error("Image load timeout")), 10000);
+        setTimeout(() => {
+          console.log('[ImageUpload] Image load timeout');
+          reject(new Error("Image load timeout"));
+        }, 10000);
       });
-    } catch {
-      // Even if image fails to load, we'll still allow it
-      // The user might have a valid URL that just doesn't allow CORS checking
-      console.warn("Could not verify image, proceeding anyway");
+    } catch (e) {
+      console.warn('[ImageUpload] Could not verify image:', e);
     }
 
+    console.log('[ImageUpload] Calling onImageUploaded with:', normalizedUrl);
     setIsChecking(false);
     onImageUploaded(normalizedUrl);
   };
@@ -196,7 +231,9 @@ export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
             src={normalizeImageUrl(imageUrl)}
             alt="Preview"
             className="w-full h-full object-contain"
-            onError={() => {
+            onError={(e) => {
+              console.log('[ImageUpload] Preview image error:', e);
+              console.log('[ImageUpload] Failed URL:', normalizeImageUrl(imageUrl));
               setIsValid(false);
               showError("Could not load image. Check the URL.");
             }}
