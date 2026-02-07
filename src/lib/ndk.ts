@@ -1,4 +1,4 @@
-import NDK, { NDKNip07Signer, NDKPrivateKeySigner } from "@nostr-dev-kit/ndk";
+import NDK, { NDKPrivateKeySigner } from "@nostr-dev-kit/ndk";
 
 // Default relay for first-time users
 const DEFAULT_RELAYS = ["ws://localhost:4433"];
@@ -37,21 +37,24 @@ class NDKService {
 
   public static getInstance(): NDK {
     if (!NDKService.instance) {
-      // Priority: Private key from env (for dev), then NIP-07
+      // Priority: Private key from env (for dev). For normal runtime, signer is set after login.
       let signer;
       
       const devKey = getDevKey();
       if (devKey) {
         console.warn("Using development key - NOT FOR PRODUCTION!");
         signer = new NDKPrivateKeySigner(devKey);
-      } else {
-        signer = new NDKNip07Signer();
       }
-      
-      NDKService.instance = new NDK({
+
+      const config: ConstructorParameters<typeof NDK>[0] = {
         explicitRelayUrls: getStoredRelays(),
-        signer: signer,
-      });
+      };
+
+      if (signer) {
+        config.signer = signer;
+      }
+
+      NDKService.instance = new NDK(config);
     }
     return NDKService.instance;
   }

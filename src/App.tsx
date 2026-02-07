@@ -1,6 +1,6 @@
 import { NostrProvider, useNostr } from "./providers/NostrProvider";
 import { AppShell } from "./components/layout/AppShell";
-import { ArrowBigUp, ArrowBigDown, MessageSquare, Share2, MoreHorizontal, Loader2, Edit3, Trash2, AlertCircle } from "lucide-react";
+import { ArrowBigUp, ArrowBigDown, MessageSquare, Share2, Loader2, AlertCircle } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
 import { BrowserRouter as Router, Routes, Route, useNavigate } from "react-router-dom";
@@ -18,6 +18,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ConnectionStatus } from "./components/ConnectionStatus";
 import { InfiniteScroll } from "./components/InfiniteScroll";
 import { PostContent } from "./components/PostContent";
+import { PostActionsMenu } from "./components/PostActionsMenu";
 import { ToastContainer } from "./components/Toast";
 import { useVoting } from "./hooks/useVoting";
 import { useFollows } from "./hooks/useFollows";
@@ -32,12 +33,10 @@ import { NDKProfile } from "./lib/types";
 function Feed() {
   const { ndk, user } = useNostr();
   const navigate = useNavigate();
-  const { error: showError } = useToast();
+  const { error: showError, success } = useToast();
   const [posts, setPosts] = useState<NDKEvent[]>([]);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyContent, setReplyContent] = useState("");
-  const [postActionMenuOpen, setPostActionMenuOpen] = useState<string | null>(null);
-  const actionMenuRef = useRef<HTMLDivElement>(null);
   const [profiles, setProfiles] = useState<Record<string, NDKProfile>>({});
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
   const [sortBy, setSortBy] = useState<"hot" | "new" | "top">("new");
@@ -405,6 +404,98 @@ function Feed() {
     }
   };
 
+  const handleEditPost = async (postId: string, newContent: string) => {
+    if (!user) return;
+    const targetPost = posts.find((p) => p.id === postId);
+    if (!targetPost) return;
+
+    if (targetPost.pubkey !== user.pubkey) {
+      showError("You can only edit your own posts");
+      return;
+    }
+
+    const trimmedContent = newContent.trim();
+    if (!trimmedContent || trimmedContent === targetPost.content.trim()) return;
+
+    try {
+      const deletion = new NDKEvent(ndk);
+      deletion.kind = 5;
+      deletion.content = "Post replaced by edited version";
+      deletion.tags = [["e", targetPost.id]];
+      await deletion.publish();
+
+      const replacement = new NDKEvent(ndk);
+      replacement.kind = NDKKind.Text;
+      replacement.content = trimmedContent;
+      replacement.tags = [
+        ...targetPost.tags.filter((tag) => tag[0] !== "edited"),
+        ["edited", targetPost.id, new Date().toISOString()],
+      ];
+      await replacement.publish();
+
+      seenEventIds.current.delete(targetPost.id);
+      seenEventIds.current.add(replacement.id);
+
+      setPosts((prev) =>
+        sortPosts(
+          prev.map((p) => (p.id === postId ? replacement : p)),
+          sortBy
+        )
+      );
+      setCommentCounts((prev) => {
+        const next = { ...prev };
+        delete next[postId];
+        return next;
+      });
+      if (replyingTo === postId) {
+        setReplyingTo(null);
+      }
+
+      fetchProfile(replacement.pubkey);
+      subscribeToReactions(replacement.id);
+      fetchCommentCount(replacement.id);
+
+      success("Post edited");
+    } catch (error) {
+      logger.error("Failed to edit post", error);
+      showError("Failed to edit post. Please try again.");
+    }
+  };
+
+  const handleDeletePost = async (postId: string) => {
+    if (!user) return;
+    const targetPost = posts.find((p) => p.id === postId);
+    if (!targetPost) return;
+
+    if (targetPost.pubkey !== user.pubkey) {
+      showError("You can only delete your own posts");
+      return;
+    }
+
+    try {
+      const deletion = new NDKEvent(ndk);
+      deletion.kind = 5;
+      deletion.content = "Deleted by author";
+      deletion.tags = [["e", postId]];
+      await deletion.publish();
+
+      setPosts((prev) => prev.filter((p) => p.id !== postId));
+      setCommentCounts((prev) => {
+        const next = { ...prev };
+        delete next[postId];
+        return next;
+      });
+      if (replyingTo === postId) {
+        setReplyingTo(null);
+      }
+
+      success("Post deleted");
+    } catch (error) {
+      logger.error("Failed to delete post", error);
+      showError("Failed to delete post. Please try again.");
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Create Post Area */}
@@ -621,58 +712,12 @@ function Feed() {
                         />
                       </div>
                       
-                      {/* 3-dot menu */}
-                      <div 
-                        className="relative ml-auto" 
-                        ref={postActionMenuOpen === post.id ? actionMenuRef : undefined}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <button 
-                          onClick={() => setPostActionMenuOpen(postActionMenuOpen === post.id ? null : post.id)}
-                          className="p-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground"
-                        >
-                          <MoreHorizontal size={16} />
-                        </button>
-                        
-                        {postActionMenuOpen === post.id && (
-                          <div className="absolute right-0 bottom-full mb-1 w-36 bg-card border rounded-lg shadow-lg z-10 py-1">
-                            {user?.pubkey === post.pubkey ? (
-                              <>
-                                <button
-                                  onClick={() => {
-                                    navigate(`/post/${post.id}`);
-                                    setPostActionMenuOpen(null);
-                                  }}
-                                  className="w-full px-3 py-2 text-left text-xs hover:bg-accent flex items-center gap-2"
-                                >
-                                  <Edit3 size={12} />
-                                  Edit Post
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    alert("Delete coming soon - use post detail page");
-                                    setPostActionMenuOpen(null);
-                                  }}
-                                  className="w-full px-3 py-2 text-left text-xs hover:bg-accent text-red-500 flex items-center gap-2"
-                                >
-                                  <Trash2 size={12} />
-                                  Delete Post
-                                </button>
-                              </>
-                            ) : (
-                              <button
-                                onClick={() => {
-                                  navigator.clipboard.writeText(`${window.location.origin}/post/${post.id}`);
-                                  setPostActionMenuOpen(null);
-                                }}
-                                className="w-full px-3 py-2 text-left text-xs hover:bg-accent flex items-center gap-2"
-                              >
-                                <Share2 size={12} />
-                                Share Post
-                              </button>
-                            )}
-                          </div>
-                        )}
+                      <div className="ml-auto" onClick={(e) => e.stopPropagation()}>
+                        <PostActionsMenu
+                          post={post}
+                          onEdit={handleEditPost}
+                          onDelete={handleDeletePost}
+                        />
                       </div>
                     </div>
 

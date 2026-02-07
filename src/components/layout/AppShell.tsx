@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Home, LogIn, Menu, X, Search, User, Settings, Bell, Compass, Palette } from "lucide-react";
+import { Home, LogIn, Menu, X, Search, User, Settings, Bell, Compass, Palette, LogOut } from "lucide-react";
 import { useNostr } from "../../providers/NostrProvider";
 import { useNavigate } from "react-router-dom";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
@@ -26,7 +26,7 @@ interface TrendingCommunity extends Community {
 }
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, ndk } = useNostr();
+  const { user, ndk, logout } = useNostr();
   const navigate = useNavigate();
   useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -90,6 +90,12 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
       sub.stop();
     };
   }, [ndk, user]);
+
+  const handleLogout = () => {
+    logout();
+    navigate("/");
+    setSidebarOpen(false);
+  };
 
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
@@ -176,6 +182,15 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                   {user.profile?.name || "User"}
                 </span>
               </button>
+
+              <button
+                onClick={handleLogout}
+                className="hidden sm:flex items-center gap-2 px-3 py-2 hover:bg-secondary rounded-xl transition-colors text-muted-foreground hover:text-foreground"
+                title="Log out"
+              >
+                <LogOut size={18} />
+                <span className="hidden xl:inline text-sm font-medium">Log Out</span>
+              </button>
             </div>
           ) : (
             <button 
@@ -244,6 +259,11 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                     icon={<User size={20} />} 
                     label="Profile" 
                     onClick={() => { navigate(`/profile/${user.pubkey}`); setSidebarOpen(false); }} 
+                  />
+                  <SidebarItem
+                    icon={<LogOut size={20} />}
+                    label="Log Out"
+                    onClick={handleLogout}
                   />
                 </>
               )}
