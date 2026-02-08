@@ -436,6 +436,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     root.classList.add(nextTheme);
 
     let accentColor = "orange";
+    let surfaceTheme = "default";
     try {
       const saved = localStorage.getItem(THEME_STORAGE_KEY);
       if (saved) {
@@ -443,12 +444,15 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         if (typeof parsed?.accentColor === "string") {
           accentColor = parsed.accentColor;
         }
+        if (typeof parsed?.surfaceTheme === "string") {
+          surfaceTheme = parsed.surfaceTheme;
+        }
       }
     } catch {
       // Keep default accentColor
     }
 
-    const payload = { mode: nextTheme, accentColor };
+    const payload = { mode: nextTheme, accentColor, surfaceTheme };
     localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify(payload));
     localStorage.setItem("theme", nextTheme);
     window.dispatchEvent(new CustomEvent("nostr-theme-changed", { detail: payload }));

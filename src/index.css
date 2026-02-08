@@ -52,6 +52,81 @@
     --input: 220 12% 18%;
     --ring: hsl(var(--primary-hue) 85% 50%);
   }
+
+  .light[data-surface-theme="twitter"] {
+    --background: 210 60% 98%;
+    --foreground: 215 30% 14%;
+    --card: 0 0% 100%;
+    --card-foreground: 215 30% 14%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 30% 14%;
+    --secondary: 210 45% 94%;
+    --secondary-foreground: 215 30% 20%;
+    --muted: 210 35% 95%;
+    --muted-foreground: 215 15% 40%;
+    --border: 210 24% 86%;
+    --input: 210 24% 86%;
+  }
+
+  .dark[data-surface-theme="twitter"] {
+    --background: 210 32% 13%;
+    --foreground: 210 25% 94%;
+    --card: 210 26% 16%;
+    --card-foreground: 210 25% 94%;
+    --popover: 210 26% 16%;
+    --popover-foreground: 210 25% 94%;
+    --secondary: 210 18% 21%;
+    --secondary-foreground: 210 25% 94%;
+    --muted: 210 18% 21%;
+    --muted-foreground: 210 14% 67%;
+    --border: 210 16% 25%;
+    --input: 210 16% 25%;
+  }
+
+  .light[data-surface-theme="forest"] {
+    --background: 150 25% 98%;
+    --foreground: 150 18% 14%;
+    --card: 0 0% 100%;
+    --card-foreground: 150 18% 14%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 150 18% 14%;
+    --secondary: 150 18% 93%;
+    --secondary-foreground: 150 20% 22%;
+    --muted: 150 16% 94%;
+    --muted-foreground: 150 10% 40%;
+    --border: 150 15% 85%;
+    --input: 150 15% 85%;
+  }
+
+  .dark[data-surface-theme="forest"] {
+    --background: 155 20% 9%;
+    --foreground: 150 20% 94%;
+    --card: 155 18% 12%;
+    --card-foreground: 150 20% 94%;
+    --popover: 155 18% 12%;
+    --popover-foreground: 150 20% 94%;
+    --secondary: 155 14% 17%;
+    --secondary-foreground: 150 20% 94%;
+    --muted: 155 14% 17%;
+    --muted-foreground: 155 10% 63%;
+    --border: 155 12% 23%;
+    --input: 155 12% 23%;
+  }
+
+  .dark[data-surface-theme="amoled"] {
+    --background: 0 0% 0%;
+    --foreground: 0 0% 96%;
+    --card: 0 0% 4%;
+    --card-foreground: 0 0% 96%;
+    --popover: 0 0% 4%;
+    --popover-foreground: 0 0% 96%;
+    --secondary: 0 0% 8%;
+    --secondary-foreground: 0 0% 96%;
+    --muted: 0 0% 8%;
+    --muted-foreground: 0 0% 62%;
+    --border: 0 0% 14%;
+    --input: 0 0% 14%;
+  }
 }
 
 @layer base {

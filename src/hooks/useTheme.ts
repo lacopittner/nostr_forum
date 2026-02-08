@@ -10,6 +10,7 @@ interface ThemeColors {
 export interface ThemeState {
   mode: ThemeMode;
   accentColor: string;
+  surfaceTheme: string;
   colors: ThemeColors;
 }
 
@@ -24,12 +25,37 @@ export const ACCENT_COLORS = {
   yellow: { hue: 45, name: "Yellow" },
 };
 
+export const SURFACE_THEMES = {
+  default: {
+    name: "Default",
+    description: "Balanced neutral surfaces",
+    preview: { light: "hsl(0 0% 100%)", dark: "hsl(220 15% 8%)" },
+  },
+  amoled: {
+    name: "AMOLED",
+    description: "Pure black for OLED displays",
+    preview: { light: "hsl(0 0% 100%)", dark: "hsl(0 0% 0%)" },
+  },
+  twitter: {
+    name: "Midnight Blue",
+    description: "Dark navy inspired by modern social apps",
+    preview: { light: "hsl(210 60% 98%)", dark: "hsl(210 32% 13%)" },
+  },
+  forest: {
+    name: "Forest",
+    description: "Soft green-tinted surfaces",
+    preview: { light: "hsl(150 25% 98%)", dark: "hsl(155 20% 9%)" },
+  },
+};
+
 type AccentColorKey = keyof typeof ACCENT_COLORS;
+type SurfaceThemeKey = keyof typeof SURFACE_THEMES;
 
 const STORAGE_KEY = "nostr-reddit-theme";
 const LEGACY_STORAGE_KEY = "theme";
 const DEFAULT_MODE: ThemeMode = "system";
 const DEFAULT_ACCENT: AccentColorKey = "orange";
+const DEFAULT_SURFACE: SurfaceThemeKey = "default";
 
 function isThemeMode(value: unknown): value is ThemeMode {
   return value === "light" || value === "dark" || value === "system";
@@ -37,6 +63,10 @@ function isThemeMode(value: unknown): value is ThemeMode {
 
 function isAccentColorKey(value: unknown): value is AccentColorKey {
   return typeof value === "string" && value in ACCENT_COLORS;
+}
+
+function isSurfaceThemeKey(value: unknown): value is SurfaceThemeKey {
+  return typeof value === "string" && value in SURFACE_THEMES;
 }
 
 function generateColors(accent: string): ThemeColors {
@@ -47,13 +77,14 @@ function generateColors(accent: string): ThemeColors {
   };
 }
 
-function readStoredTheme(): { mode: ThemeMode; accentColor: AccentColorKey } {
+function readStoredTheme(): { mode: ThemeMode; accentColor: AccentColorKey; surfaceTheme: SurfaceThemeKey } {
   if (typeof window === "undefined") {
-    return { mode: DEFAULT_MODE, accentColor: DEFAULT_ACCENT };
+    return { mode: DEFAULT_MODE, accentColor: DEFAULT_ACCENT, surfaceTheme: DEFAULT_SURFACE };
   }
 
   let mode: ThemeMode = DEFAULT_MODE;
   let accentColor: AccentColorKey = DEFAULT_ACCENT;
+  let surfaceTheme: SurfaceThemeKey = DEFAULT_SURFACE;
 
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -65,7 +96,10 @@ function readStoredTheme(): { mode: ThemeMode; accentColor: AccentColorKey } {
       if (isAccentColorKey(parsed?.accentColor)) {
         accentColor = parsed.accentColor;
       }
-      return { mode, accentColor };
+      if (isSurfaceThemeKey(parsed?.surfaceTheme)) {
+        surfaceTheme = parsed.surfaceTheme;
+      }
+      return { mode, accentColor, surfaceTheme };
     }
   } catch {
     // Fallback to legacy storage below
@@ -76,7 +110,7 @@ function readStoredTheme(): { mode: ThemeMode; accentColor: AccentColorKey } {
     mode = legacyMode;
   }
 
-  return { mode, accentColor };
+  return { mode, accentColor, surfaceTheme };
 }
 
 function resolveEffectiveMode(mode: ThemeMode): "light" | "dark" {
@@ -92,6 +126,7 @@ export function useTheme() {
     return {
       mode: stored.mode,
       accentColor: stored.accentColor,
+      surfaceTheme: stored.surfaceTheme,
       colors: generateColors(stored.accentColor),
     };
   });
@@ -105,6 +140,7 @@ export function useTheme() {
     const effectiveMode = resolveEffectiveMode(newTheme.mode);
     root.classList.add(effectiveMode);
     localStorage.setItem(LEGACY_STORAGE_KEY, effectiveMode);
+    root.setAttribute("data-surface-theme", newTheme.surfaceTheme);
 
     // Apply accent color
     const colorDef = ACCENT_COLORS[newTheme.accentColor as AccentColorKey] || ACCENT_COLORS.orange;
@@ -128,6 +164,7 @@ export function useTheme() {
     const payload = {
       mode: theme.mode,
       accentColor: theme.accentColor,
+      surfaceTheme: theme.surfaceTheme,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     window.dispatchEvent(new CustomEvent("nostr-theme-changed", { detail: payload }));
@@ -140,12 +177,17 @@ export function useTheme() {
     const syncFromStorage = () => {
       const stored = readStoredTheme();
       setThemeState((prev) => {
-        if (prev.mode === stored.mode && prev.accentColor === stored.accentColor) {
+        if (
+          prev.mode === stored.mode &&
+          prev.accentColor === stored.accentColor &&
+          prev.surfaceTheme === stored.surfaceTheme
+        ) {
           return prev;
         }
         return {
           mode: stored.mode,
           accentColor: stored.accentColor,
+          surfaceTheme: stored.surfaceTheme,
           colors: generateColors(stored.accentColor),
         };
       });
@@ -186,17 +228,27 @@ export function useTheme() {
   const setAccentColor = useCallback((accentColor: string) => {
     setThemeState(prev => ({
       ...prev,
-      accentColor,
+      accentColor: isAccentColorKey(accentColor) ? accentColor : DEFAULT_ACCENT,
       colors: generateColors(accentColor),
+    }));
+  }, []);
+
+  const setSurfaceTheme = useCallback((surfaceTheme: string) => {
+    setThemeState(prev => ({
+      ...prev,
+      surfaceTheme: isSurfaceThemeKey(surfaceTheme) ? surfaceTheme : DEFAULT_SURFACE,
     }));
   }, []);
 
   return {
     mode: theme.mode,
     accentColor: theme.accentColor,
+    surfaceTheme: theme.surfaceTheme,
     colors: theme.colors,
     accentColors: ACCENT_COLORS as typeof ACCENT_COLORS,
+    surfaceThemes: SURFACE_THEMES as typeof SURFACE_THEMES,
     setMode,
     setAccentColor,
+    setSurfaceTheme,
   };
 }
