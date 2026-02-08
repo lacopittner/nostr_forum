@@ -15,6 +15,7 @@ import { CommunityWikiModal } from "../components/CommunityWikiModal";
 import { SavePostButton } from "../components/SavePostButton";
 import { ZapButton } from "../components/ZapButton";
 import { CreatePost } from "../components/CreatePost";
+import { MarkdownContent } from "../components/MarkdownContent";
 import { logger } from "../lib/logger";
 import { useToast } from "../lib/toast";
 
@@ -22,6 +23,56 @@ const COMMUNITY_APPROVAL_KIND = 4550;
 const COMMUNITY_BLOCK_KIND = 34551;
 
 type ModerationStatus = "approved" | "rejected";
+
+interface ParsedCommunitySearch {
+  userFilters: string[];
+  tagFilters: string[];
+  textFilters: string[];
+}
+
+const parseCommunitySearchQuery = (rawQuery: string): ParsedCommunitySearch => {
+  const cleaned = rawQuery.toLowerCase().replace(/[()]/g, " ").trim();
+  if (!cleaned) {
+    return { userFilters: [], tagFilters: [], textFilters: [] };
+  }
+
+  const userFilters: string[] = [];
+  const tagFilters: string[] = [];
+  const textFilters: string[] = [];
+
+  const tokens = cleaned.split(/\s+/).filter(Boolean);
+  tokens.forEach((token) => {
+    if (token.startsWith("user:")) {
+      const value = token.slice("user:".length).trim();
+      if (value) userFilters.push(value);
+      return;
+    }
+
+    // Support both tag:xxx and !tag:xxx syntax.
+    if (token.startsWith("tag:") || token.startsWith("!tag:")) {
+      const value = token.replace(/^!?tag:/, "").trim();
+      if (value) tagFilters.push(value);
+      return;
+    }
+
+    textFilters.push(token);
+  });
+
+  return { userFilters, tagFilters, textFilters };
+};
+
+const extractPostSearchTags = (post: NDKEvent): string[] => {
+  const tagValues = post.tags
+    .filter((tag) => tag[0] === "t" || tag[0] === "flair")
+    .map((tag) => (tag[1] || "").toLowerCase())
+    .filter(Boolean);
+
+  const contentHashtags = Array.from(post.content.matchAll(/#([a-z0-9_-]+)/gi))
+    .map((match) => match[1].toLowerCase())
+    .filter(Boolean);
+
+  return Array.from(new Set([...tagValues, ...contentHashtags]));
+};
 
 export function CommunityDetailPage() {
   const { ndk, user } = useNostr();
@@ -207,18 +258,48 @@ export function CommunityDetailPage() {
   // Filter posts by search query
   useEffect(() => {
     if (!searchQuery.trim()) {
-      setFilteredPosts(posts.filter(post => !blockedPubkeys.has(post.pubkey)));
+      setFilteredPosts(posts.filter((post) => !blockedPubkeys.has(post.pubkey)));
       return;
     }
-    
-    const query = searchQuery.toLowerCase();
-    const filtered = posts.filter(post => 
-      !blockedPubkeys.has(post.pubkey) &&
-      (post.content.toLowerCase().includes(query) ||
-      post.pubkey.toLowerCase().includes(query))
-    );
+
+    const parsedQuery = parseCommunitySearchQuery(searchQuery);
+
+    const filtered = posts.filter((post) => {
+      if (blockedPubkeys.has(post.pubkey)) return false;
+
+      const profile = profiles[post.pubkey] || {};
+      const content = post.content.toLowerCase();
+      const pubkey = post.pubkey.toLowerCase();
+      const userSearchSpace = [
+        pubkey,
+        (profile.name || "").toLowerCase(),
+        (profile.displayName || "").toLowerCase(),
+        (profile.display_name || "").toLowerCase(),
+        (profile.nip05 || "").toLowerCase(),
+      ]
+        .filter(Boolean)
+        .join(" ");
+
+      const postTags = extractPostSearchTags(post);
+
+      const userMatches = parsedQuery.userFilters.every((userTerm) =>
+        userSearchSpace.includes(userTerm)
+      );
+      if (!userMatches) return false;
+
+      const tagMatches = parsedQuery.tagFilters.every((tagTerm) =>
+        postTags.some((tag) => tag === tagTerm || tag.includes(tagTerm))
+      );
+      if (!tagMatches) return false;
+
+      const textMatches = parsedQuery.textFilters.every((textTerm) => content.includes(textTerm));
+      if (!textMatches) return false;
+
+      return true;
+    });
+
     setFilteredPosts(filtered);
-  }, [searchQuery, posts, blockedPubkeys]);
+  }, [searchQuery, posts, blockedPubkeys, profiles]);
 
   const getPostModerationStatus = (postId: string): ModerationStatus | "pending" => {
     return moderationState[postId]?.status || "approved";
@@ -501,7 +582,13 @@ export function CommunityDetailPage() {
           <div className="flex items-start justify-between mb-4">
             <div>
               <h1 className="text-3xl font-black mb-2">{communityInfo.name}</h1>
-              <p className="text-gray-400">{communityInfo.description}</p>
+              {communityInfo.description ? (
+                <div className="[&_.prose]:max-w-none [&_.prose]:text-sm [&_.prose]:text-gray-400 [&_.prose_p]:my-0">
+                  <MarkdownContent content={communityInfo.description} />
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400">No description yet.</p>
+              )}
             </div>
             <div className="flex gap-2">
               {isOwner && (
@@ -597,7 +684,9 @@ export function CommunityDetailPage() {
           {communityInfo.rules && (
             <div className="mt-4 p-4 bg-accent/30 rounded-lg">
               <h3 className="font-bold text-sm mb-2">Community Rules</h3>
-              <p className="text-sm text-gray-400 whitespace-pre-wrap">{communityInfo.rules}</p>
+              <div className="[&_.prose]:max-w-none [&_.prose]:text-sm [&_.prose]:text-gray-400 [&_.prose_p]:my-2">
+                <MarkdownContent content={communityInfo.rules} />
+              </div>
             </div>
           )}
         </div>
@@ -659,12 +748,16 @@ export function CommunityDetailPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
             <input
               type="text"
-              placeholder="Search posts in this community..."
+              placeholder="Search posts... (user:alice tag:nostr update)"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-accent/50 border rounded-lg focus:ring-1 focus:ring-[var(--primary)] text-sm"
             />
           </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Use <code>user:xxx</code>, <code>tag:yyy</code> or <code>!tag:yyy</code>. Combine with
+            text, for example: <code>user:xxx tag:yyy something</code>.
+          </p>
         </div>
 
         {visiblePosts.length === 0 && (

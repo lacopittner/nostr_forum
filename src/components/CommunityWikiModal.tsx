@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNostr } from "../providers/NostrProvider";
 import { NDKEvent } from "@nostr-dev-kit/ndk";
 import { X, Book, Edit2, Save, Eye } from "lucide-react";
+import { MarkdownContent } from "./MarkdownContent";
 
 interface CommunityWikiModalProps {
   community: NDKEvent;
@@ -160,8 +161,8 @@ export function CommunityWikiModal({ community, communityId, isOwner, isModerato
               </button>
             </div>          </div>
         ) : wikiContent ? (
-          <div className="prose prose-invert max-w-none">
-            <div className="whitespace-pre-wrap text-sm leading-relaxed">{wikiContent}</div>
+          <div className="[&_.prose]:max-w-none [&_.prose]:text-sm [&_.prose]:leading-relaxed">
+            <MarkdownContent content={wikiContent} />
           </div>
         ) : (
           <div className="text-center py-12 text-gray-400">

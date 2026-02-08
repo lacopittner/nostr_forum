@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Home, LogIn, Menu, X, Search, User, Settings, Bell, Compass, Palette, LogOut } from "lucide-react";
+import { Home, LogIn, Menu, X, Search, User, Settings, Bell, Compass, Palette, LogOut, Users } from "lucide-react";
 import { useNostr } from "../../providers/NostrProvider";
 import { useNavigate } from "react-router-dom";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
@@ -243,7 +243,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
                 onClick={() => { navigate("/search"); setSidebarOpen(false); }} 
               />
               <SidebarItem 
-                icon={<span className="text-lg">👥</span>} 
+                icon={<Users size={20} />} 
                 label="Communities" 
                 onClick={() => { navigate("/communities"); setSidebarOpen(false); }} 
               />
@@ -312,7 +312,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
         {/* Main Content - Reddit-like max-width */}
         <main className="flex-1 min-w-0 p-0 sm:p-4 lg:p-6 pb-20 lg:pb-6">
-          <div className="max-w-[756px] mx-auto">
+          <div className="max-w-[920px] mx-auto">
             {children}
           </div>
         </main>

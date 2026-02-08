@@ -9,7 +9,7 @@ export const communitySchema = z.object({
     .regex(/^[a-zA-Z0-9_\s]+$/, 'Only letters, numbers, spaces and underscores allowed'),
   description: z
     .string()
-    .max(500, 'Description must be less than 500 characters')
+    .max(2000, 'Description must be less than 2000 characters')
     .optional(),
   image: z
     .string()
@@ -18,7 +18,7 @@ export const communitySchema = z.object({
     .or(z.literal('')),
   rules: z
     .string()
-    .max(500, 'Rules must be less than 500 characters')
+    .max(2000, 'Rules must be less than 2000 characters')
     .optional(),
   moderators: z
     .array(z.string().regex(/^(npub1|nsec1|[a-f0-9]{64})$/, 'Invalid pubkey format'))

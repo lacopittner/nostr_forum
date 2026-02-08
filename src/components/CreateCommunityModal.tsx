@@ -1,11 +1,12 @@
 import { useNostr } from "../providers/NostrProvider";
 import { useState } from "react";
 import { NDKEvent } from "@nostr-dev-kit/ndk";
-import { X, Plus, Trash2 } from "lucide-react";
+import { X, Plus, Trash2, Eye, Pencil } from "lucide-react";
 import { nanoid } from "nanoid";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { communitySchema, type CommunityFormData } from "../lib/validation";
+import { MarkdownContent } from "./MarkdownContent";
 
 interface CreateCommunityModalProps {
   exit: () => void;
@@ -21,6 +22,8 @@ export function CreateCommunityModal({ exit }: CreateCommunityModalProps) {
   const [flairs, setFlairs] = useState<string[]>([]);
   const [newFlair, setNewFlair] = useState("");
   const [isPublishing, setIsPublishing] = useState(false);
+  const [descriptionPreview, setDescriptionPreview] = useState(false);
+  const [rulesPreview, setRulesPreview] = useState(false);
 
   const {
     register,
@@ -40,6 +43,7 @@ export function CreateCommunityModal({ exit }: CreateCommunityModalProps) {
   const watchedName = watch("name");
   const watchedDescription = watch("description");
   const watchedRules = watch("rules");
+  const watchedImage = watch("image");
 
   const onSubmit = async (data: CommunityFormData) => {
     if (!user) return;
@@ -156,11 +160,16 @@ export function CreateCommunityModal({ exit }: CreateCommunityModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-card border rounded-xl max-w-lg w-full p-6 shadow-lg max-h-[90vh] overflow-y-auto">
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-black">Create Community</h2>
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 p-4 flex items-start sm:items-center justify-center overflow-y-auto">
+      <div className="bg-card border rounded-2xl max-w-5xl w-full p-6 sm:p-7 shadow-2xl max-h-[94vh] overflow-y-auto">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-black">Create Community</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Configure your NIP-72 community. Description and rules support Markdown.
+              </p>
+            </div>
             <button
               type="button"
               onClick={exit}
@@ -170,181 +179,232 @@ export function CreateCommunityModal({ exit }: CreateCommunityModalProps) {
             </button>
           </div>
 
-          <div className="space-y-4">
-            {/* Community Name */}
-            <div>
-              <label className="block text-sm font-semibold mb-2">Community Name *</label>
-              <input
-                type="text"
-                {...register("name")}
-                placeholder="e.g., Photography Tips"
-                className={`w-full bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-[var(--primary)] outline-none ${
-                  errors.name ? "border-red-500" : ""
-                }`}
-                maxLength={100}
-              />
-              <div className="flex justify-between mt-1">
-                <span className="text-xs text-gray-400">{watchedName?.length || 0}/100</span>
-                {errors.name && (
-                  <span className="text-xs text-red-400">{errors.name.message}</span>
-                )}
-              </div>
-            </div>
-
-            {/* Description */}
-            <div>
-              <label className="block text-sm font-semibold mb-2">Description</label>
-              <textarea
-                {...register("description")}
-                placeholder="What is this community about?"
-                className={`w-full bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-[var(--primary)] outline-none min-h-[80px] resize-none ${
-                  errors.description ? "border-red-500" : ""
-                }`}
-                maxLength={500}
-              />
-              <div className="flex justify-between mt-1">
-                <span className="text-xs text-gray-400">{watchedDescription?.length || 0}/500</span>
-                {errors.description && (
-                  <span className="text-xs text-red-400">{errors.description.message}</span>
-                )}
-              </div>
-            </div>
-
-            {/* Community Image */}
-            <div>
-              <label className="block text-sm font-semibold mb-2">Community Image URL</label>
-              <input
-                type="url"
-                {...register("image")}
-                placeholder="https://example.com/image.jpg"
-                className={`w-full bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-[var(--primary)] outline-none ${
-                  errors.image ? "border-red-500" : ""
-                }`}
-              />
-              {errors.image && (
-                <p className="text-xs text-red-400 mt-1">{errors.image.message}</p>
-              )}
-              {watch("image") && !errors.image && (
-                <img
-                  src={watch("image")}
-                  alt="Preview"
-                  className="mt-3 w-full h-32 object-cover rounded-lg"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none';
-                  }}
-                />
-              )}
-            </div>
-
-            {/* Rules */}
-            <div>
-              <label className="block text-sm font-semibold mb-2">Community Rules</label>
-              <textarea
-                {...register("rules")}
-                placeholder="1. Be respectful&#10;2. No spam&#10;3. Stay on topic"
-                className={`w-full bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-[var(--primary)] outline-none min-h-[80px] resize-none ${
-                  errors.rules ? "border-red-500" : ""
-                }`}
-                maxLength={500}
-              />
-              <div className="flex justify-between mt-1">
-                <span className="text-xs text-gray-400">{watchedRules?.length || 0}/500</span>
-                {errors.rules && (
-                  <span className="text-xs text-red-400">{errors.rules.message}</span>
-                )}
-              </div>
-            </div>
-
-            {/* Moderators */}
-            <div>
-              <label className="block text-sm font-semibold mb-2">Moderators</label>
-              <p className="text-xs text-gray-400 mb-2">Add npub or pubkey of moderators (optional)</p>
-              
-              <div className="flex gap-2 mb-2">
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+            <div className="space-y-5">
+              {/* Community Name */}
+              <div>
+                <label className="block text-sm font-semibold mb-2">Community Name *</label>
                 <input
                   type="text"
-                  value={newModerator}
-                  onChange={(e) => setNewModerator(e.target.value)}
-                  placeholder="npub1... or pubkey"
-                  className="flex-1 bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-[var(--primary)] outline-none text-sm"
+                  {...register("name")}
+                  placeholder="e.g., Photography Tips"
+                  className={`w-full bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-[var(--primary)] outline-none ${
+                    errors.name ? "border-red-500" : ""
+                  }`}
+                  maxLength={100}
                 />
-                <button
-                  type="button"
-                  onClick={handleAddModerator}
-                  disabled={!newModerator.trim()}
-                  className="px-4 py-2 bg-accent hover:bg-accent/70 rounded-lg transition-colors disabled:opacity-50"
-                >
-                  <Plus size={20} />
-                </button>
+                <div className="flex justify-between mt-1">
+                  <span className="text-xs text-gray-400">{watchedName?.length || 0}/100</span>
+                  {errors.name && (
+                    <span className="text-xs text-red-400">{errors.name.message}</span>
+                  )}
+                </div>
               </div>
 
-              {/* Moderators List */}
-              {moderators.length > 0 && (
-                <div className="space-y-2">
-                  {moderators.map((mod, index) => (
-                    <div key={index} className="flex items-center justify-between bg-accent/30 rounded-lg p-2">
-                      <span className="text-sm font-mono truncate flex-1 mr-2">
-                        {mod.slice(0, 20)}...{mod.slice(-8)}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveModerator(index)}
-                        className="p-1.5 text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  ))}
+              {/* Description */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-semibold">Description</label>
+                  <button
+                    type="button"
+                    onClick={() => setDescriptionPreview((prev) => !prev)}
+                    className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-accent/50 hover:bg-accent transition-colors"
+                  >
+                    {descriptionPreview ? <Pencil size={12} /> : <Eye size={12} />}
+                    {descriptionPreview ? "Write" : "Preview"}
+                  </button>
                 </div>
-              )}
+                {descriptionPreview ? (
+                  <div className="rounded-lg border bg-accent/20 p-3 min-h-[140px]">
+                    {watchedDescription?.trim() ? (
+                      <MarkdownContent content={watchedDescription} />
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Nothing to preview yet.</p>
+                    )}
+                  </div>
+                ) : (
+                  <textarea
+                    {...register("description")}
+                    placeholder={"Use Markdown. Example:\n## About\nShare tips, resources, and weekly threads."}
+                    className={`w-full bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-[var(--primary)] outline-none min-h-[140px] resize-y ${
+                      errors.description ? "border-red-500" : ""
+                    }`}
+                    maxLength={2000}
+                  />
+                )}
+                <div className="flex justify-between mt-1">
+                  <span className="text-xs text-gray-400">{watchedDescription?.length || 0}/2000</span>
+                  {errors.description && (
+                    <span className="text-xs text-red-400">{errors.description.message}</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Community Image */}
+              <div>
+                <label className="block text-sm font-semibold mb-2">Community Image URL</label>
+                <input
+                  type="url"
+                  {...register("image")}
+                  placeholder="https://example.com/image.jpg"
+                  className={`w-full bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-[var(--primary)] outline-none ${
+                    errors.image ? "border-red-500" : ""
+                  }`}
+                />
+                {errors.image && (
+                  <p className="text-xs text-red-400 mt-1">{errors.image.message}</p>
+                )}
+                {watchedImage && !errors.image && (
+                  <img
+                    src={watchedImage}
+                    alt="Preview"
+                    className="mt-3 w-full h-36 object-cover rounded-lg"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = "none";
+                    }}
+                  />
+                )}
+              </div>
+
+              {/* Rules */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-semibold">Community Rules</label>
+                  <button
+                    type="button"
+                    onClick={() => setRulesPreview((prev) => !prev)}
+                    className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-accent/50 hover:bg-accent transition-colors"
+                  >
+                    {rulesPreview ? <Pencil size={12} /> : <Eye size={12} />}
+                    {rulesPreview ? "Write" : "Preview"}
+                  </button>
+                </div>
+                {rulesPreview ? (
+                  <div className="rounded-lg border bg-accent/20 p-3 min-h-[160px]">
+                    {watchedRules?.trim() ? (
+                      <MarkdownContent content={watchedRules} />
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No rules preview yet.</p>
+                    )}
+                  </div>
+                ) : (
+                  <textarea
+                    {...register("rules")}
+                    placeholder={"Use Markdown. Example:\n1. Be respectful\n2. No spam\n3. Use flairs correctly"}
+                    className={`w-full bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-[var(--primary)] outline-none min-h-[160px] resize-y ${
+                      errors.rules ? "border-red-500" : ""
+                    }`}
+                    maxLength={2000}
+                  />
+                )}
+                <div className="flex justify-between mt-1">
+                  <span className="text-xs text-gray-400">{watchedRules?.length || 0}/2000</span>
+                  {errors.rules && (
+                    <span className="text-xs text-red-400">{errors.rules.message}</span>
+                  )}
+                </div>
+              </div>
             </div>
 
-            {/* Flairs */}
-            <div>
-              <label className="block text-sm font-semibold mb-2">Flairs/Tags ({flairs.length}/10)</label>
-              <p className="text-xs text-gray-400 mb-2">Add flair options for posts (optional)</p>
-              
-              <div className="flex gap-2 mb-2">
-                <input
-                  type="text"
-                  value={newFlair}
-                  onChange={(e) => setNewFlair(e.target.value)}
-                  placeholder="e.g., Discussion, Meme, News"
-                  className="flex-1 bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-[var(--primary)] outline-none text-sm"
-                  maxLength={30}
-                />
-                <button
-                  type="button"
-                  onClick={handleAddFlair}
-                  disabled={!newFlair.trim() || flairs.length >= 10}
-                  className="px-4 py-2 bg-accent hover:bg-accent/70 rounded-lg transition-colors disabled:opacity-50"
-                >
-                  <Plus size={20} />
-                </button>
+            <div className="space-y-5">
+              <div className="rounded-lg border bg-accent/25 p-4 text-xs text-muted-foreground">
+                Tip: add moderators as pubkeys. You are added as owner-moderator automatically.
               </div>
 
-              {/* Flairs List */}
-              {flairs.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {flairs.map((flair, index) => (
-                    <div key={index} className="flex items-center gap-1 bg-[var(--primary)]/10 border border-[var(--primary)]/20 rounded-full px-3 py-1">
-                      <span className="text-sm text-[var(--primary)]">{flair}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveFlair(index)}
-                        className="p-0.5 text-[var(--primary)]/60 hover:text-[var(--primary)] transition-colors"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  ))}
+              {/* Moderators */}
+              <div>
+                <label className="block text-sm font-semibold mb-2">Moderators</label>
+                <p className="text-xs text-gray-400 mb-2">Add npub or hex pubkey (optional)</p>
+
+                <div className="flex gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={newModerator}
+                    onChange={(e) => setNewModerator(e.target.value)}
+                    placeholder="npub1... or pubkey"
+                    className="flex-1 bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-[var(--primary)] outline-none text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddModerator}
+                    disabled={!newModerator.trim()}
+                    className="px-4 py-2 bg-accent hover:bg-accent/70 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    <Plus size={20} />
+                  </button>
                 </div>
-              )}
+
+                {moderators.length > 0 && (
+                  <div className="space-y-2 max-h-44 overflow-y-auto scrollbar-thin pr-1">
+                    {moderators.map((mod, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between bg-accent/30 rounded-lg p-2"
+                      >
+                        <span className="text-sm font-mono truncate flex-1 mr-2">
+                          {mod.slice(0, 20)}...{mod.slice(-8)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveModerator(index)}
+                          className="p-1.5 text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Flairs */}
+              <div>
+                <label className="block text-sm font-semibold mb-2">Flairs/Tags ({flairs.length}/10)</label>
+                <p className="text-xs text-gray-400 mb-2">Add flair options for posts (optional)</p>
+
+                <div className="flex gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={newFlair}
+                    onChange={(e) => setNewFlair(e.target.value)}
+                    placeholder="e.g., Discussion, Meme, News"
+                    className="flex-1 bg-accent/50 border rounded-lg p-3 focus:ring-1 focus:ring-[var(--primary)] outline-none text-sm"
+                    maxLength={30}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddFlair}
+                    disabled={!newFlair.trim() || flairs.length >= 10}
+                    className="px-4 py-2 bg-accent hover:bg-accent/70 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    <Plus size={20} />
+                  </button>
+                </div>
+
+                {flairs.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {flairs.map((flair, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center gap-1 bg-[var(--primary)]/10 border border-[var(--primary)]/20 rounded-full px-3 py-1"
+                      >
+                        <span className="text-sm text-[var(--primary)]">{flair}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveFlair(index)}
+                          className="p-0.5 text-[var(--primary)]/60 hover:text-[var(--primary)] transition-colors"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Actions */}
-          <div className="flex gap-3 mt-6">
+          <div className="flex gap-3 pt-2">
             <button
               type="button"
               onClick={exit}
