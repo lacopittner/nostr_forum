@@ -2,7 +2,7 @@ import { useNostr } from "../providers/NostrProvider";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
-import { Edit2, ArrowLeft, Shield, Users, ArrowBigUp, ArrowBigDown, Gavel, UserPlus, UserCheck, Search, Book, AlertCircle } from "lucide-react";
+import { Edit2, ArrowLeft, Shield, Users, ArrowBigUp, ArrowBigDown, Gavel, UserPlus, UserCheck, Search, Book, AlertCircle, HelpCircle } from "lucide-react";
 import { EditCommunityModal } from "../components/EditCommunityModal";
 import { ManageModeratorsModal } from "../components/ManageModeratorsModal";
 import { ManageBlockedUsersModal } from "../components/ManageBlockedUsersModal";
@@ -30,8 +30,22 @@ interface ParsedCommunitySearch {
   textFilters: string[];
 }
 
+const unquoteSearchValue = (value: string): string => {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+
+  if (
+    (trimmed.startsWith("\"") && trimmed.endsWith("\"")) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+
+  return trimmed;
+};
+
 const parseCommunitySearchQuery = (rawQuery: string): ParsedCommunitySearch => {
-  const cleaned = rawQuery.toLowerCase().replace(/[()]/g, " ").trim();
+  const cleaned = rawQuery.replace(/[()]/g, " ").trim();
   if (!cleaned) {
     return { userFilters: [], tagFilters: [], textFilters: [] };
   }
@@ -40,22 +54,32 @@ const parseCommunitySearchQuery = (rawQuery: string): ParsedCommunitySearch => {
   const tagFilters: string[] = [];
   const textFilters: string[] = [];
 
-  const tokens = cleaned.split(/\s+/).filter(Boolean);
-  tokens.forEach((token) => {
-    if (token.startsWith("user:")) {
-      const value = token.slice("user:".length).trim();
+  // Supports:
+  // - user:alice
+  // - user:"alice dev"
+  // - tag:test
+  // - tag:"testing team"
+  // - plain text with or without quotes
+  const tokens = cleaned.match(/(?:[^\s"]+:"[^"]*"|[^\s"]+:[^\s]+|"[^"]*"|\S+)/g) ?? [];
+  tokens.forEach((rawToken) => {
+    const token = rawToken.trim();
+    const lowered = token.toLowerCase();
+
+    if (lowered.startsWith("user:")) {
+      const value = unquoteSearchValue(token.slice(token.indexOf(":") + 1)).toLowerCase();
       if (value) userFilters.push(value);
       return;
     }
 
     // Support both tag:xxx and !tag:xxx syntax.
-    if (token.startsWith("tag:") || token.startsWith("!tag:")) {
-      const value = token.replace(/^!?tag:/, "").trim();
+    if (lowered.startsWith("tag:") || lowered.startsWith("!tag:")) {
+      const value = unquoteSearchValue(token.replace(/^!?tag:/i, "")).toLowerCase();
       if (value) tagFilters.push(value);
       return;
     }
 
-    textFilters.push(token);
+    const textValue = unquoteSearchValue(token).toLowerCase();
+    if (textValue) textFilters.push(textValue);
   });
 
   return { userFilters, tagFilters, textFilters };
@@ -86,6 +110,7 @@ export function CommunityDetailPage() {
   const [showModeratorsModal, setShowModeratorsModal] = useState(false);
   const [showBlockedModal, setShowBlockedModal] = useState(false);
   const [showWikiModal, setShowWikiModal] = useState(false);
+  const [showCreatePostForm, setShowCreatePostForm] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredPosts, setFilteredPosts] = useState<NDKEvent[]>([]);
   
@@ -104,6 +129,7 @@ export function CommunityDetailPage() {
   // Profile fetching
   const [profiles, setProfiles] = useState<Record<string, any>>({});
   const profileFetchQueue = useRef(new Set<string>());
+  const authorNpubCache = useRef(new Map<string, string>());
   
   const seenPostIds = useRef(new Set<string>());
   
@@ -146,6 +172,20 @@ export function CommunityDetailPage() {
       // Silently fail - user pubkey will be displayed instead
     }
   }, [ndk, profiles]);
+
+  const getAuthorNpub = useCallback((authorPubkey: string): string => {
+    const cached = authorNpubCache.current.get(authorPubkey);
+    if (cached !== undefined) return cached;
+
+    try {
+      const npub = ndk.getUser({ pubkey: authorPubkey }).npub.toLowerCase();
+      authorNpubCache.current.set(authorPubkey, npub);
+      return npub;
+    } catch {
+      authorNpubCache.current.set(authorPubkey, "");
+      return "";
+    }
+  }, [ndk]);
 
 
 
@@ -270,8 +310,10 @@ export function CommunityDetailPage() {
       const profile = profiles[post.pubkey] || {};
       const content = post.content.toLowerCase();
       const pubkey = post.pubkey.toLowerCase();
+      const npub = getAuthorNpub(post.pubkey);
       const userSearchSpace = [
         pubkey,
+        npub,
         (profile.name || "").toLowerCase(),
         (profile.displayName || "").toLowerCase(),
         (profile.display_name || "").toLowerCase(),
@@ -292,14 +334,17 @@ export function CommunityDetailPage() {
       );
       if (!tagMatches) return false;
 
-      const textMatches = parsedQuery.textFilters.every((textTerm) => content.includes(textTerm));
+      const textSearchSpace = [content, ...postTags].join(" ");
+      const textMatches = parsedQuery.textFilters.every((textTerm) =>
+        textSearchSpace.includes(textTerm)
+      );
       if (!textMatches) return false;
 
       return true;
     });
 
     setFilteredPosts(filtered);
-  }, [searchQuery, posts, blockedPubkeys, profiles]);
+  }, [searchQuery, posts, blockedPubkeys, profiles, getAuthorNpub]);
 
   const getPostModerationStatus = (postId: string): ModerationStatus | "pending" => {
     return moderationState[postId]?.status || "approved";
@@ -590,94 +635,114 @@ export function CommunityDetailPage() {
                 <p className="text-sm text-gray-400">No description yet.</p>
               )}
             </div>
-            <div className="flex gap-2">
-              {isOwner && (
-                <>
+            <div className="flex flex-col items-end gap-2">
+              <div className="flex flex-wrap justify-end gap-2">
+                {isOwner && (
+                  <>
+                    <button
+                      onClick={() => setShowEditModal(true)}
+                      className="flex items-center space-x-2 px-4 py-2 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-dark)] transition-all"
+                    >
+                      <Edit2 size={16} />
+                      <span>Edit</span>
+                    </button>
+                  </>
+                )}
+                {isModerator && (
+                  <>
+                    <button
+                      onClick={() => setShowModeratorsModal(true)}
+                      className="flex items-center space-x-2 px-4 py-2 bg-accent hover:bg-accent/70 text-white rounded-lg transition-all"
+                      title="Manage Moderators"
+                    >
+                      <Users size={16} />
+                    </button>
+                    <button
+                      onClick={() => setShowBlockedModal(true)}
+                      className="flex items-center space-x-2 px-4 py-2 bg-red-600/80 hover:bg-red-600 text-white rounded-lg transition-all"
+                      title="Manage Blocked Users"
+                    >
+                      <Gavel size={16} />
+                    </button>
+                  </>
+                )}
+                
+                {/* Join/Leave Button */}
+                {user && !isOwner && (
                   <button
-                    onClick={() => setShowEditModal(true)}
-                    className="flex items-center space-x-2 px-4 py-2 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-dark)] transition-all"
+                    onClick={handleJoinLeave}
+                    disabled={isJoining}
+                    className={`flex items-center space-x-2 px-6 py-2 rounded-lg font-bold transition-all ${
+                      hasJoined
+                        ? "bg-accent text-foreground hover:bg-accent/70"
+                        : "bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)]"
+                    } ${isJoining ? "opacity-50" : ""}`}
                   >
-                    <Edit2 size={16} />
-                    <span>Edit</span>
+                    {isJoining ? (
+                      <span>...</span>
+                    ) : hasJoined ? (
+                      <>
+                        <UserCheck size={16} />
+                        <span>Joined</span>
+                      </>
+                    ) : (
+                      <>
+                        <UserPlus size={16} />
+                        <span>Join</span>
+                      </>
+                    )}
                   </button>
-                </>
-              )}
-              {isModerator && (
-                <>
-                  <button
-                    onClick={() => setShowModeratorsModal(true)}
-                    className="flex items-center space-x-2 px-4 py-2 bg-accent hover:bg-accent/70 text-white rounded-lg transition-all"
-                    title="Manage Moderators"
-                  >
-                    <Users size={16} />
-                  </button>
-                  <button
-                    onClick={() => setShowBlockedModal(true)}
-                    className="flex items-center space-x-2 px-4 py-2 bg-red-600/80 hover:bg-red-600 text-white rounded-lg transition-all"
-                    title="Manage Blocked Users"
-                  >
-                    <Gavel size={16} />
-                  </button>
-                </>
-              )}
-              
-              {/* Join/Leave Button */}
-              {user && !isOwner && (
+                )}
+                
+                {/* Wiki Button */}
                 <button
-                  onClick={handleJoinLeave}
-                  disabled={isJoining}
-                  className={`flex items-center space-x-2 px-6 py-2 rounded-lg font-bold transition-all ${
-                    hasJoined
-                      ? "bg-accent text-foreground hover:bg-accent/70"
-                      : "bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)]"
-                  } ${isJoining ? "opacity-50" : ""}`}
+                  onClick={() => setShowWikiModal(true)}
+                  className="flex items-center space-x-2 px-4 py-2 bg-accent hover:bg-accent/70 text-white rounded-lg transition-all"
+                  title="Community Wiki"
                 >
-                  {isJoining ? (
-                    <span>...</span>
-                  ) : hasJoined ? (
-                    <>
-                      <UserCheck size={16} />
-                      <span>Joined</span>
-                    </>
-                  ) : (
-                    <>
-                      <UserPlus size={16} />
-                      <span>Join</span>
-                    </>
-                  )}
+                  <Book size={16} />
+                  <span className="hidden sm:inline">Wiki</span>
                 </button>
-              )}
-              
-              {/* Wiki Button */}
-              <button
-                onClick={() => setShowWikiModal(true)}
-                className="flex items-center space-x-2 px-4 py-2 bg-accent hover:bg-accent/70 text-white rounded-lg transition-all"
-                title="Community Wiki"
-              >
-                <Book size={16} />
-                <span className="hidden sm:inline">Wiki</span>
-              </button>
+              </div>
+
             </div>
           </div>
 
-          {/* Moderators */}
-          {communityInfo.moderators.length > 0 && (
-            <div className="mb-4">
-              <div className="flex items-center gap-2 text-sm text-gray-400 mb-2">
-                <Shield size={14} className="text-[var(--primary)]" />
-                <span>Moderators:</span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {communityInfo.moderators.map((mod) => (
-                  <span
-                    key={mod}
-                    className="text-xs px-2 py-1 bg-accent/50 rounded-md font-mono"
-                  >
-                    {mod.slice(0, 16)}...{mod.slice(-4)}
-                    {mod === community.pubkey && <span className="text-[var(--primary)] ml-1">(owner)</span>}
-                  </span>
-                ))}
-              </div>
+          {(communityInfo.moderators.length > 0 || (user && !isCurrentUserBlocked() && community)) && (
+            <div
+              className={`mb-4 flex items-start gap-4 ${
+                communityInfo.moderators.length > 0 ? "justify-between" : "justify-end"
+              }`}
+            >
+              {communityInfo.moderators.length > 0 && (
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 text-sm text-gray-400 mb-2">
+                    <Shield size={14} className="text-[var(--primary)]" />
+                    <span>Moderators:</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {communityInfo.moderators.map((mod) => (
+                      <span
+                        key={mod}
+                        className="text-xs px-2 py-1 bg-accent/50 rounded-md font-mono"
+                      >
+                        {mod.slice(0, 16)}...{mod.slice(-4)}
+                        {mod === community.pubkey && <span className="text-[var(--primary)] ml-1">(owner)</span>}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {user && !isCurrentUserBlocked() && community && (
+                <button
+                  onClick={() => setShowCreatePostForm((prev) => !prev)}
+                  className="shrink-0 flex items-center gap-2 px-4 py-2 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-dark)] transition-all text-sm font-bold"
+                >
+                  <span>✍️</span>
+                  <span>Create post</span>
+                </button>
+              )}
             </div>
           )}
 
@@ -706,7 +771,7 @@ export function CommunityDetailPage() {
       )}
 
       {/* Create Post */}
-      {user && !isCurrentUserBlocked() && community && (
+      {user && !isCurrentUserBlocked() && community && showCreatePostForm && (
         <CreatePost
           community={{
             id: communityId || "",
@@ -716,6 +781,7 @@ export function CommunityDetailPage() {
             flairs: communityInfo.flairs,
           }}
           onPostCreated={() => {
+            setShowCreatePostForm(false);
             // Refresh posts after creating
             seenPostIds.current.clear();
             // Reload posts
@@ -744,20 +810,32 @@ export function CommunityDetailPage() {
         
         {/* Search Posts */}
         <div className="bg-card border rounded-xl p-4 shadow-sm">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-            <input
-              type="text"
-              placeholder="Search posts... (user:alice tag:nostr update)"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-accent/50 border rounded-lg focus:ring-1 focus:ring-[var(--primary)] text-sm"
-            />
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <input
+                type="text"
+                placeholder="Search posts..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-accent/50 border rounded-lg focus:ring-1 focus:ring-[var(--primary)] text-sm"
+              />
+            </div>
+            <div className="relative group shrink-0">
+              <button
+                type="button"
+                aria-label="Search syntax help"
+                className="w-8 h-8 rounded-full bg-accent/50 hover:bg-accent text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
+              >
+                <HelpCircle size={16} />
+              </button>
+              <div className="pointer-events-none absolute right-0 top-10 z-10 w-80 rounded-lg border bg-card/95 p-3 text-xs text-muted-foreground shadow-lg opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                Use <code>user:xxx</code> (name/pubkey/npub), <code>tag:yyy</code>, or quoted values
+                like <code>tag:&quot;open source&quot;</code>. Plain text also works, for example:
+                <code> user:npub1... tag:&quot;nostr update&quot; search </code>.
+              </div>
+            </div>
           </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            Use <code>user:xxx</code>, <code>tag:yyy</code> or <code>!tag:yyy</code>. Combine with
-            text, for example: <code>user:xxx tag:yyy something</code>.
-          </p>
         </div>
 
         {visiblePosts.length === 0 && (

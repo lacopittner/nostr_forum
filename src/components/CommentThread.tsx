@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { NDKEvent } from "@nostr-dev-kit/ndk";
-import { ArrowBigUp, ArrowBigDown, MessageSquare, CornerDownRight, Trash2 } from "lucide-react";
+import { ArrowBigUp, ArrowBigDown, MessageSquare, CornerDownRight, Trash2, HelpCircle } from "lucide-react";
 import { useNostr } from "../providers/NostrProvider";
 
 import { NDKProfile } from "../lib/types";
+import { MarkdownContent } from "./MarkdownContent";
 
 interface Comment {
   event: NDKEvent;
@@ -118,8 +119,10 @@ export function CommentThread({
         </div>
 
         {/* Comment Content */}
-        <div className="text-sm whitespace-pre-wrap mb-3 pl-8">
-          {event.content}
+        <div className="text-sm mb-3 pl-8">
+          <div className="[&_.prose]:max-w-none [&_.prose]:text-sm">
+            <MarkdownContent content={event.content} />
+          </div>
         </div>
 
         {/* Comment Actions */}
@@ -178,13 +181,28 @@ export function CommentThread({
         {/* Reply Input */}
         {isReplying && (
           <div className="mt-3 pl-8 space-y-2">
-            <textarea
-              value={replyContent}
-              onChange={(e) => setReplyContent(e.target.value)}
-              placeholder="Write a reply..."
-              className="w-full bg-background border rounded-lg p-2 text-sm focus:ring-1 focus:ring-[var(--primary)] min-h-[80px] resize-none"
-              autoFocus
-            />
+            <div className="flex items-start gap-2">
+              <textarea
+                value={replyContent}
+                onChange={(e) => setReplyContent(e.target.value)}
+                placeholder="Write a reply..."
+                className="flex-1 bg-background border rounded-lg p-2 text-sm focus:ring-1 focus:ring-[var(--primary)] min-h-[80px] resize-y"
+                autoFocus
+              />
+              <div className="relative group shrink-0">
+                <button
+                  type="button"
+                  aria-label="Reply syntax help"
+                  className="w-7 h-7 rounded-full bg-accent/50 hover:bg-accent text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
+                >
+                  <HelpCircle size={14} />
+                </button>
+                <div className="pointer-events-none absolute right-0 top-9 z-10 w-64 rounded-lg border bg-card/95 p-3 text-xs text-muted-foreground shadow-lg opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                  Markdown works here too. Example: <code>**bold**</code>, <code>*italic*</code>,
+                  <code> # heading</code>, <code>- list</code>.
+                </div>
+              </div>
+            </div>
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => {

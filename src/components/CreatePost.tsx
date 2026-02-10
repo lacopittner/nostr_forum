@@ -1,12 +1,33 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
-import { Send, Loader2, AlertCircle, Image as ImageIcon, X } from "lucide-react";
+import {
+  Send,
+  Loader2,
+  AlertCircle,
+  Image as ImageIcon,
+  X,
+  Maximize2,
+  Minimize2,
+  Bold,
+  Italic,
+  Heading2,
+  List,
+  ListOrdered,
+  Quote,
+  Code,
+  Link as LinkIcon,
+  Eye,
+  Edit2,
+  ChevronDown,
+} from "lucide-react";
 import { useNostr } from "../providers/NostrProvider";
 import { useToast } from "../lib/toast";
 import { useRateLimit } from "../hooks/useRateLimit";
 import { logger } from "../lib/logger";
 import { FlairSelector } from "./FlairSelector";
 import { ImageUpload } from "./ImageUpload";
+import { MarkdownContent } from "./MarkdownContent";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
 interface CreatePostProps {
   community?: {
@@ -38,6 +59,12 @@ export function CreatePost({ community, communities, onPostCreated }: CreatePost
   const [selectedFlair, setSelectedFlair] = useState<string | null>(null);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [showImageUpload, setShowImageUpload] = useState(false);
+  const [isFullscreenEditorOpen, setIsFullscreenEditorOpen] = useState(false);
+  const [showMarkdownPreview, setShowMarkdownPreview] = useState(false);
+  const [isHeadingMenuOpen, setIsHeadingMenuOpen] = useState(false);
+  const inlineTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const fullscreenTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const headingMenuRef = useRef<HTMLDivElement>(null);
 
   const { checkRateLimit } = useRateLimit("posting", {
     maxAttempts: 3,
@@ -49,8 +76,237 @@ export function CreatePost({ community, communities, onPostCreated }: CreatePost
   const selectedCommunity = isInCommunityPage
     ? community
     : communities?.find((c) => c.atag === selectedCommunityAtag);
+  const canPublish = !!user && !!content.trim() && (isInCommunityPage || !!selectedCommunityAtag);
 
   const availableFlairs = selectedCommunity?.flairs || [];
+
+  useEffect(() => {
+    if (!isFullscreenEditorOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsFullscreenEditorOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isFullscreenEditorOpen]);
+
+  useEffect(() => {
+    if (isFullscreenEditorOpen && !showMarkdownPreview) {
+      requestAnimationFrame(() => {
+        fullscreenTextareaRef.current?.focus();
+      });
+    }
+  }, [isFullscreenEditorOpen, showMarkdownPreview]);
+
+  useEffect(() => {
+    if (!isHeadingMenuOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!headingMenuRef.current) return;
+      if (!headingMenuRef.current.contains(event.target as Node)) {
+        setIsHeadingMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isHeadingMenuOpen]);
+
+  const getActiveTextarea = () =>
+    isFullscreenEditorOpen ? fullscreenTextareaRef.current : inlineTextareaRef.current;
+
+  const applySelectionTransform = (
+    transform: (
+      value: string,
+      start: number,
+      end: number,
+      selectedText: string
+    ) => { nextValue: string; nextEnd: number }
+  ) => {
+    const textarea = getActiveTextarea();
+    const start = textarea?.selectionStart ?? content.length;
+    const end = textarea?.selectionEnd ?? content.length;
+    const selectedText = content.slice(start, end);
+    const { nextValue, nextEnd } = transform(content, start, end, selectedText);
+
+    setContent(nextValue);
+
+    requestAnimationFrame(() => {
+      const activeTextarea = getActiveTextarea();
+      if (!activeTextarea) return;
+      activeTextarea.focus();
+      activeTextarea.setSelectionRange(nextEnd, nextEnd);
+    });
+  };
+
+  const applyWrapSyntax = (before: string, after: string, placeholder: string) => {
+    applySelectionTransform((value, start, end, selectedText) => {
+      const text = selectedText || placeholder;
+      const replacement = `${before}${text}${after}`;
+      return {
+        nextValue: `${value.slice(0, start)}${replacement}${value.slice(end)}`,
+        nextEnd: start + before.length + text.length,
+      };
+    });
+  };
+
+  const applyLinePrefix = (prefix: string, placeholder: string) => {
+    applySelectionTransform((value, start, end) => {
+      const lineStart = value.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
+      const nextLineIndex = value.indexOf("\n", end);
+      const lineEnd = nextLineIndex === -1 ? value.length : nextLineIndex;
+      const selectedBlock = value.slice(lineStart, lineEnd);
+      const blockToFormat = selectedBlock || placeholder;
+      const prefixedBlock = blockToFormat
+        .split("\n")
+        .map((line) => (line ? `${prefix}${line}` : prefix.trimEnd()))
+        .join("\n");
+
+      return {
+        nextValue: `${value.slice(0, lineStart)}${prefixedBlock}${value.slice(lineEnd)}`,
+        nextEnd: lineStart + prefixedBlock.length,
+      };
+    });
+  };
+
+  const applyHeading = (level: "paragraph" | "h1" | "h2" | "h3" | "h4") => {
+    const headingPrefixByLevel = {
+      paragraph: "",
+      h1: "# ",
+      h2: "## ",
+      h3: "### ",
+      h4: "#### ",
+    } as const;
+
+    const headingPrefix = headingPrefixByLevel[level];
+
+    applySelectionTransform((value, start, end) => {
+      const lineStart = value.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
+      const nextLineIndex = value.indexOf("\n", end);
+      const lineEnd = nextLineIndex === -1 ? value.length : nextLineIndex;
+      const selectedBlock = value.slice(lineStart, lineEnd);
+
+      if (!selectedBlock && level === "paragraph") {
+        return { nextValue: value, nextEnd: end };
+      }
+
+      const blockToFormat = selectedBlock || "Heading";
+      const formattedBlock = blockToFormat
+        .split("\n")
+        .map((line) => {
+          const indent = line.match(/^\s*/)?.[0] || "";
+          const withoutIndent = line.slice(indent.length);
+          const withoutHeading = withoutIndent.replace(/^#{1,6}\s+/, "");
+
+          if (!withoutHeading.trim()) {
+            return level === "paragraph"
+              ? indent
+              : `${indent}${headingPrefix}Heading`;
+          }
+
+          return level === "paragraph"
+            ? `${indent}${withoutHeading}`
+            : `${indent}${headingPrefix}${withoutHeading}`;
+        })
+        .join("\n");
+
+      return {
+        nextValue: `${value.slice(0, lineStart)}${formattedBlock}${value.slice(lineEnd)}`,
+        nextEnd: lineStart + formattedBlock.length,
+      };
+    });
+
+    setIsHeadingMenuOpen(false);
+  };
+
+  const insertLink = () => {
+    applySelectionTransform((value, start, end, selectedText) => {
+      const linkLabel = selectedText || "link text";
+      const urlPlaceholder = "https://example.com";
+      const replacement = `[${linkLabel}](${urlPlaceholder})`;
+      const urlStart = start + linkLabel.length + 3;
+      return {
+        nextValue: `${value.slice(0, start)}${replacement}${value.slice(end)}`,
+        nextEnd: urlStart + urlPlaceholder.length,
+      };
+    });
+  };
+
+  const markdownActions = [
+    { label: "Bold", icon: Bold, onClick: () => applyWrapSyntax("**", "**", "bold text"), title: "Bold" },
+    { label: "Italic", icon: Italic, onClick: () => applyWrapSyntax("*", "*", "italic text"), title: "Italic" },
+    { label: "Bullets", icon: List, onClick: () => applyLinePrefix("- ", "List item"), title: "Bulleted list" },
+    { label: "Numbers", icon: ListOrdered, onClick: () => applyLinePrefix("1. ", "List item"), title: "Numbered list" },
+    { label: "Quote", icon: Quote, onClick: () => applyLinePrefix("> ", "Quoted text"), title: "Quote" },
+    { label: "Code", icon: Code, onClick: () => applyWrapSyntax("`", "`", "code"), title: "Inline code" },
+    { label: "Link", icon: LinkIcon, onClick: insertLink, title: "Link" },
+  ];
+
+  const insertAtCaret = (textarea: HTMLTextAreaElement, insertText: string) => {
+    const value = textarea.value;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const nextValue = `${value.slice(0, start)}${insertText}${value.slice(end)}`;
+    const nextCursor = start + insertText.length;
+
+    setContent(nextValue);
+
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(nextCursor, nextCursor);
+    });
+  };
+
+  const handleEditorKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (
+      event.key !== "Enter" ||
+      event.shiftKey ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey
+    ) {
+      return;
+    }
+
+    const textarea = event.currentTarget;
+    const { value, selectionStart, selectionEnd } = textarea;
+    if (selectionStart !== selectionEnd) return;
+
+    const lineStart = value.lastIndexOf("\n", Math.max(0, selectionStart - 1)) + 1;
+    const nextLineBreak = value.indexOf("\n", selectionStart);
+    const lineEnd = nextLineBreak === -1 ? value.length : nextLineBreak;
+    const beforeCursor = value.slice(lineStart, selectionStart);
+    const afterCursor = value.slice(selectionStart, lineEnd);
+
+    const unorderedMatch = beforeCursor.match(/^(\s*)([-*+])\s(.*)$/);
+    if (unorderedMatch) {
+      event.preventDefault();
+      const [, indent, bullet, itemText] = unorderedMatch;
+      const isEmptyListItem = itemText.trim().length === 0 && afterCursor.trim().length === 0;
+      insertAtCaret(textarea, isEmptyListItem ? "\n" : `\n${indent}${bullet} `);
+      return;
+    }
+
+    const orderedMatch = beforeCursor.match(/^(\s*)(\d+)\.\s(.*)$/);
+    if (orderedMatch) {
+      event.preventDefault();
+      const [, indent, orderNumber, itemText] = orderedMatch;
+      const isEmptyListItem = itemText.trim().length === 0 && afterCursor.trim().length === 0;
+      const nextNumber = Number(orderNumber) + 1;
+      insertAtCaret(textarea, isEmptyListItem ? "\n" : `\n${indent}${nextNumber}. `);
+    }
+  };
 
   const handleImageUploaded = (url: string) => {
     setImageUrls((prev) => [...prev, url]);
@@ -133,6 +389,12 @@ export function CreatePost({ community, communities, onPostCreated }: CreatePost
     ? "Post"
     : "Post to Community";
 
+  const openFullscreenEditor = () => {
+    setShowMarkdownPreview(false);
+    setIsHeadingMenuOpen(false);
+    setIsFullscreenEditorOpen(true);
+  };
+
   return (
     <div className="bg-card border rounded-xl p-4 shadow-sm">
       {postError && (
@@ -175,10 +437,12 @@ export function CreatePost({ community, communities, onPostCreated }: CreatePost
 
       {/* Text area */}
       <textarea
+        ref={inlineTextareaRef}
         value={content}
         onChange={(e) => setContent(e.target.value)}
+        onKeyDown={handleEditorKeyDown}
         placeholder={placeholder}
-        className="w-full bg-accent/50 border-none rounded-lg p-3 text-sm focus:ring-1 focus:ring-[var(--primary)] min-h-[100px] resize-none overflow-hidden"
+        className="w-full bg-accent/50 border-none rounded-lg p-3 text-sm focus:ring-1 focus:ring-[var(--primary)] min-h-[120px] resize-y overflow-auto"
       />
 
       {/* Image previews */}
@@ -223,6 +487,7 @@ export function CreatePost({ community, communities, onPostCreated }: CreatePost
           {/* Image toggle button */}
           <button
             onClick={() => setShowImageUpload(!showImageUpload)}
+            type="button"
             className={`flex items-center space-x-2 px-4 py-2 rounded-full font-bold text-sm transition-all ${
               showImageUpload
                 ? "bg-[var(--primary)] text-white"
@@ -231,6 +496,16 @@ export function CreatePost({ community, communities, onPostCreated }: CreatePost
           >
             <ImageIcon size={16} />
             <span>Image</span>
+          </button>
+
+          <button
+            onClick={openFullscreenEditor}
+            type="button"
+            className="flex items-center space-x-2 px-4 py-2 rounded-full font-bold text-sm transition-all text-muted-foreground hover:text-foreground hover:bg-accent"
+            title="Open full screen editor"
+          >
+            <Maximize2 size={16} />
+            <span className="hidden sm:inline">Full screen</span>
           </button>
 
           {/* Flair selector - shown when community has flairs */}
@@ -246,8 +521,7 @@ export function CreatePost({ community, communities, onPostCreated }: CreatePost
           onClick={handlePublish}
           disabled={
             isPublishing ||
-            !content.trim() ||
-            (!isInCommunityPage && !selectedCommunityAtag)
+            !canPublish
           }
           className="flex items-center space-x-2 px-6 py-2 bg-[var(--primary)] text-white rounded-full font-bold text-sm hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all"
         >
@@ -259,6 +533,187 @@ export function CreatePost({ community, communities, onPostCreated }: CreatePost
           <span>{buttonText}</span>
         </button>
       </div>
+
+      {isFullscreenEditorOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 p-3 sm:p-6">
+          <div className="mx-auto flex h-full max-w-5xl flex-col rounded-xl border border-border bg-card shadow-lg">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3 sm:px-6">
+              <div>
+                <h3 className="text-lg font-black">Full Screen Editor</h3>
+                <p className="text-xs text-muted-foreground">
+                  Markdown supported. Select text and use the toolbar buttons.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowMarkdownPreview((prev) => !prev)}
+                  type="button"
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-bold transition-all ${
+                    showMarkdownPreview
+                      ? "bg-[var(--primary)] text-white"
+                      : "bg-accent/60 text-foreground hover:bg-accent"
+                  }`}
+                >
+                  {showMarkdownPreview ? <Edit2 size={16} /> : <Eye size={16} />}
+                  <span>{showMarkdownPreview ? "Edit" : "Preview"}</span>
+                </button>
+                <button
+                  onClick={() => setIsFullscreenEditorOpen(false)}
+                  type="button"
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-bold bg-accent/60 text-foreground hover:bg-accent transition-all"
+                >
+                  <Minimize2 size={16} />
+                  <span className="hidden sm:inline">Exit</span>
+                </button>
+              </div>
+            </div>
+
+            {!showMarkdownPreview && (
+              <div className="space-y-3 border-b border-border px-4 py-3 sm:px-6">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setShowImageUpload((prev) => !prev)}
+                    onMouseDown={(event) => event.preventDefault()}
+                    type="button"
+                    title="Add image"
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
+                      showImageUpload
+                        ? "bg-[var(--primary)] text-white"
+                        : "bg-accent/60 hover:bg-accent text-foreground"
+                    }`}
+                  >
+                    <ImageIcon size={15} />
+                    <span className="hidden sm:inline">Image</span>
+                  </button>
+
+                  <div className="relative" ref={headingMenuRef}>
+                    <button
+                      onClick={() => setIsHeadingMenuOpen((prev) => !prev)}
+                      onMouseDown={(event) => event.preventDefault()}
+                      type="button"
+                      title="Heading style"
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg bg-accent/60 hover:bg-accent text-foreground text-sm transition-all"
+                    >
+                      <Heading2 size={15} />
+                      <span className="hidden sm:inline">Heading</span>
+                      <ChevronDown size={14} />
+                    </button>
+
+                    {isHeadingMenuOpen && (
+                      <div className="absolute left-0 z-20 mt-1 w-40 rounded-lg border border-border bg-card shadow-lg p-1">
+                        <button
+                          onClick={() => applyHeading("paragraph")}
+                          onMouseDown={(event) => event.preventDefault()}
+                          type="button"
+                          className="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-accent transition-colors"
+                        >
+                          Paragraph
+                        </button>
+                        <button
+                          onClick={() => applyHeading("h1")}
+                          onMouseDown={(event) => event.preventDefault()}
+                          type="button"
+                          className="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-accent transition-colors"
+                        >
+                          H1
+                        </button>
+                        <button
+                          onClick={() => applyHeading("h2")}
+                          onMouseDown={(event) => event.preventDefault()}
+                          type="button"
+                          className="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-accent transition-colors"
+                        >
+                          H2
+                        </button>
+                        <button
+                          onClick={() => applyHeading("h3")}
+                          onMouseDown={(event) => event.preventDefault()}
+                          type="button"
+                          className="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-accent transition-colors"
+                        >
+                          H3
+                        </button>
+                        <button
+                          onClick={() => applyHeading("h4")}
+                          onMouseDown={(event) => event.preventDefault()}
+                          type="button"
+                          className="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-accent transition-colors"
+                        >
+                          H4
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {markdownActions.map(({ label, icon: Icon, onClick, title }) => (
+                    <button
+                      key={label}
+                      onClick={onClick}
+                      onMouseDown={(event) => event.preventDefault()}
+                      type="button"
+                      title={title}
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg bg-accent/60 hover:bg-accent text-foreground text-sm transition-all"
+                    >
+                      <Icon size={15} />
+                      <span className="hidden sm:inline">{label}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {showImageUpload && (
+                  <div className="max-w-xl">
+                    <ImageUpload
+                      onImageUploaded={handleImageUploaded}
+                      onCancel={() => setShowImageUpload(false)}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex-1 overflow-hidden p-4 sm:p-6">
+              {showMarkdownPreview ? (
+                <div className="h-full overflow-y-auto rounded-lg border border-border bg-accent/20 p-4">
+                  {content.trim() ? (
+                    <div className="[&_.prose]:max-w-none">
+                      <MarkdownContent content={content} />
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Nothing to preview yet.</p>
+                  )}
+                </div>
+              ) : (
+                <textarea
+                  ref={fullscreenTextareaRef}
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  onKeyDown={handleEditorKeyDown}
+                  placeholder={placeholder}
+                  className="h-full min-h-[50vh] w-full rounded-lg border border-border bg-accent/40 p-4 text-sm font-mono focus:ring-1 focus:ring-[var(--primary)] resize-y"
+                />
+              )}
+            </div>
+
+            <div className="flex items-center justify-between border-t border-border px-4 py-3 sm:px-6">
+              <p className="text-xs text-muted-foreground">
+                Tip: Use `#` headings, `-` lists, and fenced code blocks for markdown formatting.
+              </p>
+              <button
+                onClick={handlePublish}
+                disabled={isPublishing || !canPublish}
+                className="flex items-center space-x-2 px-5 py-2 bg-[var(--primary)] text-white rounded-full font-bold text-sm hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all"
+              >
+                {isPublishing ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <Send size={16} />
+                )}
+                <span>{buttonText}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

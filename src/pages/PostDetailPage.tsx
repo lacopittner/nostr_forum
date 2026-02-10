@@ -2,13 +2,45 @@ import { useNostr } from "../providers/NostrProvider";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
-import { ArrowLeft, ArrowBigUp, ArrowBigDown, MessageSquare, Send, AlertCircle, Loader2, MoreHorizontal, Share2, Trash2, Edit3, UserX } from "lucide-react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+import {
+  ArrowLeft,
+  ArrowBigUp,
+  ArrowBigDown,
+  MessageSquare,
+  Send,
+  AlertCircle,
+  Loader2,
+  MoreHorizontal,
+  Share2,
+  Trash2,
+  Edit3,
+  UserX,
+  HelpCircle,
+  Image as ImageIcon,
+  X,
+  Maximize2,
+  Minimize2,
+  Bold,
+  Italic,
+  Heading2,
+  List,
+  ListOrdered,
+  Quote,
+  Code,
+  Link as LinkIcon,
+  Eye,
+  Edit2,
+  ChevronDown,
+} from "lucide-react";
 import { CommentThread } from "../components/CommentThread";
 import { useVoting } from "../hooks/useVoting";
 import { useGlobalBlocks } from "../hooks/useGlobalBlocks";
 import { PostContent } from "../components/PostContent";
 import { ZapButton } from "../components/ZapButton";
 import { SavePostButton } from "../components/SavePostButton";
+import { ImageUpload } from "../components/ImageUpload";
+import { MarkdownContent } from "../components/MarkdownContent";
 import { logger } from "../lib/logger";
 import { useToast } from "../lib/toast";
 
@@ -32,10 +64,18 @@ export function PostDetailPage() {
   
   // Reply state
   const [replyContent, setReplyContent] = useState("");
+  const [replyImageUrls, setReplyImageUrls] = useState<string[]>([]);
+  const [showReplyImageUpload, setShowReplyImageUpload] = useState(false);
+  const [isCommentFullscreenOpen, setIsCommentFullscreenOpen] = useState(false);
+  const [showCommentMarkdownPreview, setShowCommentMarkdownPreview] = useState(false);
+  const [isCommentHeadingMenuOpen, setIsCommentHeadingMenuOpen] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState("");
+  const replyTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const fullscreenReplyTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const commentHeadingMenuRef = useRef<HTMLDivElement>(null);
   
   // Voting - use the custom hook instead of duplicating logic
   const { reactions, userVotes, votingIds, error: votingError, handleReaction, processIncomingReaction, processIncomingDeletion } = useVoting();
@@ -46,6 +86,19 @@ export function PostDetailPage() {
   
   const seenEventIds = useRef(new Set<string>());
   const commentsMap = useRef(new Map<string, NDKEvent>());
+
+  const isRedditLikeCommentEvent = useCallback((event: NDKEvent, rootPostId: string): boolean => {
+    const rootTag = event.tags.find((tag) => tag[0] === "e" && tag[3] === "root");
+    if (rootTag) return rootTag[1] === rootPostId;
+
+    // Backward compatibility for old comments without NIP-10 markers.
+    const hasThreadMarker = event.tags.some(
+      (tag) => tag[0] === "e" && (tag[3] === "root" || tag[3] === "reply")
+    );
+    if (hasThreadMarker) return false;
+
+    return event.tags.some((tag) => tag[0] === "e" && tag[1] === rootPostId);
+  }, []);
 
   const fetchProfile = useCallback(async (pubkey: string) => {
     if (profiles[pubkey] || profileFetchQueue.current.has(pubkey)) return;
@@ -98,6 +151,7 @@ export function PostDetailPage() {
 
     commentSub.on("event", (event: NDKEvent) => {
       if (isBlocked(event.pubkey)) return;
+      if (!isRedditLikeCommentEvent(event, postId)) return;
       if (seenEventIds.current.has(event.id)) return;
       seenEventIds.current.add(event.id);
       
@@ -137,7 +191,7 @@ export function PostDetailPage() {
     return () => {
       commentSub.stop();
     };
-  }, [ndk, postId, fetchProfile, processIncomingReaction, processIncomingDeletion, isBlocked]);
+  }, [ndk, postId, fetchProfile, processIncomingReaction, processIncomingDeletion, isBlocked, isRedditLikeCommentEvent]);
 
   const buildCommentTree = () => {
     const commentList = Array.from(commentsMap.current.values());
@@ -204,6 +258,249 @@ export function PostDetailPage() {
     buildCommentTree();
   }, [blockedPubkeys]);
 
+  useEffect(() => {
+    if (!isCommentFullscreenOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsCommentFullscreenOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isCommentFullscreenOpen]);
+
+  useEffect(() => {
+    if (isCommentFullscreenOpen && !showCommentMarkdownPreview) {
+      requestAnimationFrame(() => {
+        fullscreenReplyTextareaRef.current?.focus();
+      });
+    }
+  }, [isCommentFullscreenOpen, showCommentMarkdownPreview]);
+
+  useEffect(() => {
+    if (!isCommentHeadingMenuOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!commentHeadingMenuRef.current) return;
+      if (!commentHeadingMenuRef.current.contains(event.target as Node)) {
+        setIsCommentHeadingMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isCommentHeadingMenuOpen]);
+
+  const getActiveCommentTextarea = () =>
+    isCommentFullscreenOpen ? fullscreenReplyTextareaRef.current : replyTextareaRef.current;
+
+  const applyCommentSelectionTransform = (
+    transform: (
+      value: string,
+      start: number,
+      end: number,
+      selectedText: string
+    ) => { nextValue: string; nextEnd: number }
+  ) => {
+    const textarea = getActiveCommentTextarea();
+    const start = textarea?.selectionStart ?? replyContent.length;
+    const end = textarea?.selectionEnd ?? replyContent.length;
+    const selectedText = replyContent.slice(start, end);
+    const { nextValue, nextEnd } = transform(replyContent, start, end, selectedText);
+
+    setReplyContent(nextValue);
+
+    requestAnimationFrame(() => {
+      const activeTextarea = getActiveCommentTextarea();
+      if (!activeTextarea) return;
+      activeTextarea.focus();
+      activeTextarea.setSelectionRange(nextEnd, nextEnd);
+    });
+  };
+
+  const applyCommentWrapSyntax = (before: string, after: string, placeholder: string) => {
+    applyCommentSelectionTransform((value, start, end, selectedText) => {
+      const text = selectedText || placeholder;
+      const replacement = `${before}${text}${after}`;
+      return {
+        nextValue: `${value.slice(0, start)}${replacement}${value.slice(end)}`,
+        nextEnd: start + before.length + text.length,
+      };
+    });
+  };
+
+  const applyCommentLinePrefix = (prefix: string, placeholder: string) => {
+    applyCommentSelectionTransform((value, start, end) => {
+      const lineStart = value.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
+      const nextLineIndex = value.indexOf("\n", end);
+      const lineEnd = nextLineIndex === -1 ? value.length : nextLineIndex;
+      const selectedBlock = value.slice(lineStart, lineEnd);
+      const blockToFormat = selectedBlock || placeholder;
+      const prefixedBlock = blockToFormat
+        .split("\n")
+        .map((line) => (line ? `${prefix}${line}` : prefix.trimEnd()))
+        .join("\n");
+
+      return {
+        nextValue: `${value.slice(0, lineStart)}${prefixedBlock}${value.slice(lineEnd)}`,
+        nextEnd: lineStart + prefixedBlock.length,
+      };
+    });
+  };
+
+  const applyCommentHeading = (level: "paragraph" | "h1" | "h2" | "h3" | "h4") => {
+    const headingPrefixByLevel = {
+      paragraph: "",
+      h1: "# ",
+      h2: "## ",
+      h3: "### ",
+      h4: "#### ",
+    } as const;
+
+    const headingPrefix = headingPrefixByLevel[level];
+
+    applyCommentSelectionTransform((value, start, end) => {
+      const lineStart = value.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
+      const nextLineIndex = value.indexOf("\n", end);
+      const lineEnd = nextLineIndex === -1 ? value.length : nextLineIndex;
+      const selectedBlock = value.slice(lineStart, lineEnd);
+
+      if (!selectedBlock && level === "paragraph") {
+        return { nextValue: value, nextEnd: end };
+      }
+
+      const blockToFormat = selectedBlock || "Heading";
+      const formattedBlock = blockToFormat
+        .split("\n")
+        .map((line) => {
+          const indent = line.match(/^\s*/)?.[0] || "";
+          const withoutIndent = line.slice(indent.length);
+          const withoutHeading = withoutIndent.replace(/^#{1,6}\s+/, "");
+
+          if (!withoutHeading.trim()) {
+            return level === "paragraph"
+              ? indent
+              : `${indent}${headingPrefix}Heading`;
+          }
+
+          return level === "paragraph"
+            ? `${indent}${withoutHeading}`
+            : `${indent}${headingPrefix}${withoutHeading}`;
+        })
+        .join("\n");
+
+      return {
+        nextValue: `${value.slice(0, lineStart)}${formattedBlock}${value.slice(lineEnd)}`,
+        nextEnd: lineStart + formattedBlock.length,
+      };
+    });
+
+    setIsCommentHeadingMenuOpen(false);
+  };
+
+  const insertCommentLink = () => {
+    applyCommentSelectionTransform((value, start, end, selectedText) => {
+      const linkLabel = selectedText || "link text";
+      const urlPlaceholder = "https://example.com";
+      const replacement = `[${linkLabel}](${urlPlaceholder})`;
+      const urlStart = start + linkLabel.length + 3;
+      return {
+        nextValue: `${value.slice(0, start)}${replacement}${value.slice(end)}`,
+        nextEnd: urlStart + urlPlaceholder.length,
+      };
+    });
+  };
+
+  const commentMarkdownActions = [
+    { label: "Bold", icon: Bold, onClick: () => applyCommentWrapSyntax("**", "**", "bold text"), title: "Bold" },
+    { label: "Italic", icon: Italic, onClick: () => applyCommentWrapSyntax("*", "*", "italic text"), title: "Italic" },
+    { label: "Bullets", icon: List, onClick: () => applyCommentLinePrefix("- ", "List item"), title: "Bulleted list" },
+    { label: "Numbers", icon: ListOrdered, onClick: () => applyCommentLinePrefix("1. ", "List item"), title: "Numbered list" },
+    { label: "Quote", icon: Quote, onClick: () => applyCommentLinePrefix("> ", "Quoted text"), title: "Quote" },
+    { label: "Code", icon: Code, onClick: () => applyCommentWrapSyntax("`", "`", "code"), title: "Inline code" },
+    { label: "Link", icon: LinkIcon, onClick: insertCommentLink, title: "Link" },
+  ];
+
+  const insertReplyAtCaret = (textarea: HTMLTextAreaElement, insertText: string) => {
+    const value = textarea.value;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const nextValue = `${value.slice(0, start)}${insertText}${value.slice(end)}`;
+    const nextCursor = start + insertText.length;
+
+    setReplyContent(nextValue);
+
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(nextCursor, nextCursor);
+    });
+  };
+
+  const handleCommentEditorKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (
+      event.key !== "Enter" ||
+      event.shiftKey ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey
+    ) {
+      return;
+    }
+
+    const textarea = event.currentTarget;
+    const { value, selectionStart, selectionEnd } = textarea;
+    if (selectionStart !== selectionEnd) return;
+
+    const lineStart = value.lastIndexOf("\n", Math.max(0, selectionStart - 1)) + 1;
+    const nextLineBreak = value.indexOf("\n", selectionStart);
+    const lineEnd = nextLineBreak === -1 ? value.length : nextLineBreak;
+    const beforeCursor = value.slice(lineStart, selectionStart);
+    const afterCursor = value.slice(selectionStart, lineEnd);
+
+    const unorderedMatch = beforeCursor.match(/^(\s*)([-*+])\s(.*)$/);
+    if (unorderedMatch) {
+      event.preventDefault();
+      const [, indent, bullet, itemText] = unorderedMatch;
+      const isEmptyListItem = itemText.trim().length === 0 && afterCursor.trim().length === 0;
+      insertReplyAtCaret(textarea, isEmptyListItem ? "\n" : `\n${indent}${bullet} `);
+      return;
+    }
+
+    const orderedMatch = beforeCursor.match(/^(\s*)(\d+)\.\s(.*)$/);
+    if (orderedMatch) {
+      event.preventDefault();
+      const [, indent, orderNumber, itemText] = orderedMatch;
+      const isEmptyListItem = itemText.trim().length === 0 && afterCursor.trim().length === 0;
+      const nextNumber = Number(orderNumber) + 1;
+      insertReplyAtCaret(textarea, isEmptyListItem ? "\n" : `\n${indent}${nextNumber}. `);
+    }
+  };
+
+  const handleReplyImageUploaded = (url: string) => {
+    setReplyImageUrls((prev) => [...prev, url]);
+    setShowReplyImageUpload(false);
+  };
+
+  const handleRemoveReplyImage = (index: number) => {
+    setReplyImageUrls((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const openCommentFullscreenEditor = () => {
+    setShowCommentMarkdownPreview(false);
+    setIsCommentHeadingMenuOpen(false);
+    setIsCommentFullscreenOpen(true);
+  };
+
   const handleReply = async (parentId?: string, parentPubkey?: string, content?: string) => {
     const replyText = content || replyContent;
     const targetId = parentId || post?.id;
@@ -217,7 +514,13 @@ export function PostDetailPage() {
     try {
       const event = new NDKEvent(ndk);
       event.kind = NDKKind.Text;
-      event.content = replyText;
+
+      let finalReplyContent = replyText.trim();
+      const shouldAttachMainReplyImages = !content;
+      if (shouldAttachMainReplyImages && replyImageUrls.length > 0) {
+        finalReplyContent += `\n\n${replyImageUrls.join("\n")}`;
+      }
+      event.content = finalReplyContent;
       
       // NIP-10 threading: always reference root post
       // NIP-10 compliant threading:
@@ -245,6 +548,9 @@ export function PostDetailPage() {
       if (!content) {
         // Only clear if it's the main reply box
         setReplyContent("");
+        setReplyImageUrls([]);
+        setShowReplyImageUpload(false);
+        setShowCommentMarkdownPreview(false);
       }
       
       // Add to comments immediately
@@ -497,6 +803,9 @@ export function PostDetailPage() {
   }
 
   const totalComments = getTotalCommentCount(comments);
+  const replyPreviewContent = replyImageUrls.length > 0
+    ? `${replyContent}${replyContent.trim() ? "\n\n" : ""}${replyImageUrls.join("\n")}`
+    : replyContent;
 
   return (
     <div className="space-y-6">
@@ -705,15 +1014,91 @@ export function PostDetailPage() {
               <span>{replyError}</span>
             </div>
           )}
-          <textarea
-            value={replyContent}
-            onChange={(e) => setReplyContent(e.target.value)}
-            placeholder="What are your thoughts?"
-            className="w-full bg-accent/50 border-none rounded-lg p-3 text-sm focus:ring-1 focus:ring-[var(--primary)] min-h-[100px] resize-none"
-          />
-          <div className="mt-3 flex justify-end">
+          <div className="flex items-start gap-2">
+            <textarea
+              ref={replyTextareaRef}
+              value={replyContent}
+              onChange={(e) => setReplyContent(e.target.value)}
+              onKeyDown={handleCommentEditorKeyDown}
+              placeholder="What are your thoughts?"
+              className="flex-1 bg-accent/50 border-none rounded-lg p-3 text-sm focus:ring-1 focus:ring-[var(--primary)] min-h-[120px] resize-y overflow-auto"
+            />
+            <div className="relative group shrink-0">
+              <button
+                type="button"
+                aria-label="Comment syntax help"
+                className="w-8 h-8 rounded-full bg-accent/50 hover:bg-accent text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
+              >
+                <HelpCircle size={16} />
+              </button>
+              <div className="pointer-events-none absolute right-0 top-10 z-10 w-72 rounded-lg border bg-card/95 p-3 text-xs text-muted-foreground shadow-lg opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                Markdown and images are supported. Use full screen for formatting tools.
+              </div>
+            </div>
+          </div>
+
+          {replyImageUrls.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {replyImageUrls.map((url, idx) => (
+                <div key={`${url}-${idx}`} className="relative group">
+                  <img
+                    src={url}
+                    alt={`Comment upload ${idx + 1}`}
+                    className="h-24 w-24 object-cover rounded-lg border border-border"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src =
+                        "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Crect width='18' height='18' x='3' y='3' rx='2' ry='2'/%3E%3Ccircle cx='9' cy='9' r='2'/%3E%3Cpath d='m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21'/%3E%3C/svg%3E";
+                    }}
+                  />
+                  <button
+                    onClick={() => handleRemoveReplyImage(idx)}
+                    className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    type="button"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {showReplyImageUpload && (
+            <div className="mt-3">
+              <ImageUpload
+                onImageUploaded={handleReplyImageUploaded}
+                onCancel={() => setShowReplyImageUpload(false)}
+              />
+            </div>
+          )}
+
+          <div className="mt-3 flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowReplyImageUpload(!showReplyImageUpload)}
+                type="button"
+                className={`flex items-center space-x-2 px-4 py-2 rounded-full font-bold text-sm transition-all ${
+                  showReplyImageUpload
+                    ? "bg-[var(--primary)] text-white"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                }`}
+              >
+                <ImageIcon size={16} />
+                <span>Image</span>
+              </button>
+
+              <button
+                onClick={openCommentFullscreenEditor}
+                type="button"
+                className="flex items-center space-x-2 px-4 py-2 rounded-full font-bold text-sm transition-all text-muted-foreground hover:text-foreground hover:bg-accent"
+                title="Open full screen editor"
+              >
+                <Maximize2 size={16} />
+                <span className="hidden sm:inline">Full screen</span>
+              </button>
+            </div>
+
             <button
-              onClick={() => handleReply()}  // Call without args for root reply
+              onClick={() => handleReply()}
               disabled={isPublishing || !replyContent.trim()}
               className="flex items-center space-x-2 px-6 py-2 bg-[var(--primary)] text-white rounded-full font-bold text-sm hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all"
             >
@@ -730,6 +1115,187 @@ export function PostDetailPage() {
               )}
             </button>
           </div>
+
+          {isCommentFullscreenOpen && (
+            <div className="fixed inset-0 z-50 bg-black/80 p-3 sm:p-6">
+              <div className="mx-auto flex h-full max-w-5xl flex-col rounded-xl border border-border bg-card shadow-lg">
+                <div className="flex items-center justify-between border-b border-border px-4 py-3 sm:px-6">
+                  <div>
+                    <h3 className="text-lg font-black">Comment Editor</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Markdown supported. Select text and use the toolbar buttons.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setShowCommentMarkdownPreview((prev) => !prev)}
+                      type="button"
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-bold transition-all ${
+                        showCommentMarkdownPreview
+                          ? "bg-[var(--primary)] text-white"
+                          : "bg-accent/60 text-foreground hover:bg-accent"
+                      }`}
+                    >
+                      {showCommentMarkdownPreview ? <Edit2 size={16} /> : <Eye size={16} />}
+                      <span>{showCommentMarkdownPreview ? "Edit" : "Preview"}</span>
+                    </button>
+                    <button
+                      onClick={() => setIsCommentFullscreenOpen(false)}
+                      type="button"
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-bold bg-accent/60 text-foreground hover:bg-accent transition-all"
+                    >
+                      <Minimize2 size={16} />
+                      <span className="hidden sm:inline">Exit</span>
+                    </button>
+                  </div>
+                </div>
+
+                {!showCommentMarkdownPreview && (
+                  <div className="space-y-3 border-b border-border px-4 py-3 sm:px-6">
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => setShowReplyImageUpload((prev) => !prev)}
+                        onMouseDown={(event) => event.preventDefault()}
+                        type="button"
+                        title="Add image"
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
+                          showReplyImageUpload
+                            ? "bg-[var(--primary)] text-white"
+                            : "bg-accent/60 hover:bg-accent text-foreground"
+                        }`}
+                      >
+                        <ImageIcon size={15} />
+                        <span className="hidden sm:inline">Image</span>
+                      </button>
+
+                      <div className="relative" ref={commentHeadingMenuRef}>
+                        <button
+                          onClick={() => setIsCommentHeadingMenuOpen((prev) => !prev)}
+                          onMouseDown={(event) => event.preventDefault()}
+                          type="button"
+                          title="Heading style"
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-accent/60 hover:bg-accent text-foreground text-sm transition-all"
+                        >
+                          <Heading2 size={15} />
+                          <span className="hidden sm:inline">Heading</span>
+                          <ChevronDown size={14} />
+                        </button>
+
+                        {isCommentHeadingMenuOpen && (
+                          <div className="absolute left-0 z-20 mt-1 w-40 rounded-lg border border-border bg-card shadow-lg p-1">
+                            <button
+                              onClick={() => applyCommentHeading("paragraph")}
+                              onMouseDown={(event) => event.preventDefault()}
+                              type="button"
+                              className="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-accent transition-colors"
+                            >
+                              Paragraph
+                            </button>
+                            <button
+                              onClick={() => applyCommentHeading("h1")}
+                              onMouseDown={(event) => event.preventDefault()}
+                              type="button"
+                              className="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-accent transition-colors"
+                            >
+                              H1
+                            </button>
+                            <button
+                              onClick={() => applyCommentHeading("h2")}
+                              onMouseDown={(event) => event.preventDefault()}
+                              type="button"
+                              className="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-accent transition-colors"
+                            >
+                              H2
+                            </button>
+                            <button
+                              onClick={() => applyCommentHeading("h3")}
+                              onMouseDown={(event) => event.preventDefault()}
+                              type="button"
+                              className="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-accent transition-colors"
+                            >
+                              H3
+                            </button>
+                            <button
+                              onClick={() => applyCommentHeading("h4")}
+                              onMouseDown={(event) => event.preventDefault()}
+                              type="button"
+                              className="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-accent transition-colors"
+                            >
+                              H4
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {commentMarkdownActions.map(({ label, icon: Icon, onClick, title }) => (
+                        <button
+                          key={label}
+                          onClick={onClick}
+                          onMouseDown={(event) => event.preventDefault()}
+                          type="button"
+                          title={title}
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-accent/60 hover:bg-accent text-foreground text-sm transition-all"
+                        >
+                          <Icon size={15} />
+                          <span className="hidden sm:inline">{label}</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {showReplyImageUpload && (
+                      <div className="max-w-xl">
+                        <ImageUpload
+                          onImageUploaded={handleReplyImageUploaded}
+                          onCancel={() => setShowReplyImageUpload(false)}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex-1 overflow-hidden p-4 sm:p-6">
+                  {showCommentMarkdownPreview ? (
+                    <div className="h-full overflow-y-auto rounded-lg border border-border bg-accent/20 p-4">
+                      {replyPreviewContent.trim() ? (
+                        <div className="[&_.prose]:max-w-none">
+                          <MarkdownContent content={replyPreviewContent} />
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Nothing to preview yet.</p>
+                      )}
+                    </div>
+                  ) : (
+                    <textarea
+                      ref={fullscreenReplyTextareaRef}
+                      value={replyContent}
+                      onChange={(e) => setReplyContent(e.target.value)}
+                      onKeyDown={handleCommentEditorKeyDown}
+                      placeholder="What are your thoughts?"
+                      className="h-full min-h-[50vh] w-full rounded-lg border border-border bg-accent/40 p-4 text-sm font-mono focus:ring-1 focus:ring-[var(--primary)] resize-y"
+                    />
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between border-t border-border px-4 py-3 sm:px-6">
+                  <p className="text-xs text-muted-foreground">
+                    Tip: Use `#` headings, `-` lists, and fenced code blocks for markdown formatting.
+                  </p>
+                  <button
+                    onClick={() => handleReply()}
+                    disabled={isPublishing || !replyContent.trim()}
+                    className="flex items-center space-x-2 px-5 py-2 bg-[var(--primary)] text-white rounded-full font-bold text-sm hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all"
+                  >
+                    {isPublishing ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      <Send size={16} />
+                    )}
+                    <span>Comment</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -6,6 +6,7 @@ interface InfiniteScrollProps {
   onLoadMore: () => void;
   hasMore: boolean;
   isLoading: boolean;
+  noMoreText?: string;
   threshold?: number;
   className?: string;
 }
@@ -15,6 +16,7 @@ export const InfiniteScroll: React.FC<InfiniteScrollProps> = ({
   onLoadMore,
   hasMore,
   isLoading,
+  noMoreText = "No more posts",
   threshold = 100,
   className = ""
 }) => {
@@ -74,7 +76,7 @@ export const InfiniteScroll: React.FC<InfiniteScrollProps> = ({
         
         {!hasMore && !isLoading && (
           <div className="text-center text-sm text-muted-foreground">
-            No more posts
+            {noMoreText}
           </div>
         )}
       </div>
