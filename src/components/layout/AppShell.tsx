@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
 import { BottomNav } from "./BottomNav";
 import { LoginModal } from "../LoginModal";
+import { PinUnlockModal } from "../PinUnlockModal";
 import { ThemeModal } from "../ThemeModal";
 import { useTheme } from "../../hooks/useTheme";
 import { useCommunityMembership } from "../../hooks/useCommunityMembership";
@@ -26,7 +27,7 @@ interface TrendingCommunity extends Community {
 }
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, ndk, logout } = useNostr();
+  const { user, ndk, logout, unlockWithPin, requiresPinUnlock, pinUnlockError, dismissPinUnlock } = useNostr();
   const navigate = useNavigate();
   useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -34,6 +35,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const [scrolled, setScrolled] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showThemeModal, setShowThemeModal] = useState(false);
+  const [isUnlockingPin, setIsUnlockingPin] = useState(false);
 
   // Track scroll for sticky header effect
   useEffect(() => {
@@ -95,6 +97,23 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
     logout();
     navigate("/");
     setSidebarOpen(false);
+  };
+
+  const handlePinUnlock = async (pin: string) => {
+    setIsUnlockingPin(true);
+    try {
+      const success = await unlockWithPin(pin);
+      if (success) {
+        setShowLoginModal(false);
+      }
+    } finally {
+      setIsUnlockingPin(false);
+    }
+  };
+
+  const handleClosePinUnlock = () => {
+    dismissPinUnlock();
+    setShowLoginModal(true);
   };
 
   return (
@@ -205,6 +224,16 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
       </header>
 
       <LoginModal isOpen={showLoginModal} onClose={() => setShowLoginModal(false)} />
+      <PinUnlockModal
+        isOpen={requiresPinUnlock && !user}
+        onClose={handleClosePinUnlock}
+        onUnlock={(pin) => {
+          if (isUnlockingPin) return;
+          void handlePinUnlock(pin);
+        }}
+        error={pinUnlockError}
+        isLoading={isUnlockingPin}
+      />
       <ThemeModal isOpen={showThemeModal} onClose={() => setShowThemeModal(false)} />
 
       <div className="flex flex-1 w-full relative">

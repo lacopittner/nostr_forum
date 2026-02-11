@@ -11,6 +11,8 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
   const { login, loginWith_nsec } = useNostr();
   const [activeTab, setActiveTab] = useState<"extension" | "nsec">("extension");
   const [nsec, setNsec] = useState("");
+  const [pin, setPin] = useState("");
+  const [pinConfirm, setPinConfirm] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -45,15 +47,31 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
       return;
     }
 
+    if (!/^\d{4,6}$/.test(pin)) {
+      setError("PIN must be 4-6 digits");
+      return;
+    }
+
+    if (pin !== pinConfirm) {
+      setError("PIN confirmation does not match");
+      return;
+    }
+
     setIsLoading(true);
     setError("");
 
-    const success = await loginWith_nsec(nsec.trim());
-    if (success) {
-      onClose();
-      setNsec("");
-    } else {
-      setError("Invalid private key. Please check and try again.");
+    try {
+      const success = await loginWith_nsec(nsec.trim(), pin);
+      if (success) {
+        onClose();
+        setNsec("");
+        setPin("");
+        setPinConfirm("");
+      } else {
+        setError("Login failed. Check your private key and try again.");
+      }
+    } catch {
+      setError("Login failed. Check your private key and try again.");
     }
 
     setIsLoading(false);
@@ -61,6 +79,8 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
 
   const resetForm = () => {
     setNsec("");
+    setPin("");
+    setPinConfirm("");
     setError("");
   };
 
@@ -148,9 +168,9 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
         {/* nsec Login */}
         {activeTab === "nsec" && (
           <div className="space-y-4">
-            <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-              <p className="text-xs text-red-700">
-                Security warning: for auto-login after refresh, your private key is stored in browser localStorage on this device. Do not use this option on shared/public computers.
+            <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
+              <p className="text-xs text-emerald-700">
+                Your private key is encrypted with your PIN before storage. You will need this PIN to unlock the key on next login.
               </p>
             </div>
 
@@ -165,13 +185,37 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
                 onKeyDown={(e) => e.key === "Enter" && handleNsecLogin()}
               />
             </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">PIN (4-6 digits)</label>
+              <input
+                type="password"
+                value={pin}
+                onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="1234"
+                className="w-full bg-accent/50 border-none rounded-lg px-3 py-3 text-sm focus:ring-2 focus:ring-[var(--primary)] text-center tracking-widest"
+                onKeyDown={(e) => e.key === "Enter" && handleNsecLogin()}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Confirm PIN</label>
+              <input
+                type="password"
+                value={pinConfirm}
+                onChange={(e) => setPinConfirm(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="1234"
+                className="w-full bg-accent/50 border-none rounded-lg px-3 py-3 text-sm focus:ring-2 focus:ring-[var(--primary)] text-center tracking-widest"
+                onKeyDown={(e) => e.key === "Enter" && handleNsecLogin()}
+              />
+            </div>
             
             <button
               onClick={handleNsecLogin}
-              disabled={isLoading || !nsec.trim()}
+              disabled={isLoading || !nsec.trim() || pin.length < 4 || pinConfirm.length < 4}
               className="w-full py-3 bg-[var(--primary)] text-white rounded-lg font-bold hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all"
             >
-              {isLoading ? "Validating..." : "Log In with Private Key"}
+              {isLoading ? "Encrypting key..." : "Log In with Private Key"}
             </button>
           </div>
         )}

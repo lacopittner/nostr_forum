@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Lock, X } from "lucide-react";
 
 interface PinUnlockModalProps {
@@ -6,14 +6,22 @@ interface PinUnlockModalProps {
   onClose: () => void;
   onUnlock: (pin: string) => void;
   error?: string;
+  isLoading?: boolean;
 }
 
-export function PinUnlockModal({ isOpen, onClose, onUnlock, error }: PinUnlockModalProps) {
+export function PinUnlockModal({ isOpen, onClose, onUnlock, error, isLoading = false }: PinUnlockModalProps) {
   const [pin, setPin] = useState("");
+
+  useEffect(() => {
+    if (!isOpen) {
+      setPin("");
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   const handleSubmit = () => {
+    if (isLoading) return;
     if (pin.length >= 4) {
       onUnlock(pin);
     }
@@ -55,14 +63,15 @@ export function PinUnlockModal({ isOpen, onClose, onUnlock, error }: PinUnlockMo
           autoFocus
           className="w-full bg-accent/50 border-none rounded-lg px-3 py-4 text-sm focus:ring-2 focus:ring-[var(--primary)] text-center text-2xl tracking-widest mb-4"
           onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+          disabled={isLoading}
         />
         
         <button
           onClick={handleSubmit}
-          disabled={pin.length < 4}
+          disabled={pin.length < 4 || isLoading}
           className="w-full py-3 bg-[var(--primary)] text-white rounded-lg font-bold hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all"
         >
-          Unlock
+          {isLoading ? "Unlocking..." : "Unlock"}
         </button>
         
         <p className="text-xs text-muted-foreground text-center mt-4">

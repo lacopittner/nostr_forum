@@ -2,12 +2,24 @@ import React, { createContext, useContext, useEffect, useState, ReactNode, useCa
 import NDK, { NDKUser, NDKRelay, NDKRelayStatus, NDKNip07Signer, NDKPrivateKeySigner } from "@nostr-dev-kit/ndk";
 import { ndk } from "../lib/ndk";
 import { logger } from "../lib/logger";
+import {
+  clearEncryptedNsec,
+  decryptNsec,
+  encryptNsec,
+  getEncryptedNsec,
+  hasEncryptedNsec,
+  saveEncryptedNsec,
+} from "../lib/crypto";
 
 interface NostrContextType {
   ndk: NDK;
   user: NDKUser | undefined;
   login: () => Promise<boolean>;
-  loginWith_nsec: (nsec: string) => Promise<boolean>;
+  loginWith_nsec: (nsec: string, pin: string) => Promise<boolean>;
+  unlockWithPin: (pin: string) => Promise<boolean>;
+  requiresPinUnlock: boolean;
+  pinUnlockError: string;
+  dismissPinUnlock: () => void;
   logout: () => void;
   theme: "light" | "dark";
   toggleTheme: () => void;
@@ -84,6 +96,7 @@ type StoredUserKeys = {
   pub?: string;
   sec?: string;
   ext?: boolean;
+  encrypted?: boolean;
 };
 
 function readStoredUserKeys(): StoredUserKeys | null {
@@ -143,6 +156,8 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [user, setUser] = useState<NDKUser | undefined>(undefined);
   const [connectionStatus, setConnectionStatus] = useState<"connecting" | "connected" | "disconnected" | "error">("connecting");
   const [theme, setTheme] = useState<"light" | "dark">(getInitialTheme);
+  const [requiresPinUnlock, setRequiresPinUnlock] = useState(false);
+  const [pinUnlockError, setPinUnlockError] = useState("");
 
   // Keep context theme in sync with global theme manager.
   useEffect(() => {
@@ -314,6 +329,42 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return null;
   }, [doLogin]);
 
+  const dismissPinUnlock = useCallback(() => {
+    setRequiresPinUnlock(false);
+    setPinUnlockError("");
+  }, []);
+
+  const unlockWithPin = useCallback(async (pin: string): Promise<boolean> => {
+    const encryptedNsec = getEncryptedNsec();
+    if (!encryptedNsec) {
+      setPinUnlockError("No encrypted key found. Please login with your private key.");
+      setRequiresPinUnlock(false);
+      clearStoredUserKeys();
+      return false;
+    }
+
+    const nsec = await decryptNsec(encryptedNsec, pin);
+    if (!nsec) {
+      setPinUnlockError("Invalid PIN. Please try again.");
+      return false;
+    }
+
+    const pubkey = await loginWithNsecInternal(nsec);
+    if (!pubkey) {
+      setPinUnlockError("Failed to unlock key. Please login again with your private key.");
+      return false;
+    }
+
+    saveStoredUserKeys({
+      pub: pubkey,
+      encrypted: true,
+    });
+    setPinUnlockError("");
+    setRequiresPinUnlock(false);
+    clearLegacyAuthSession();
+    return true;
+  }, [loginWithNsecInternal]);
+
   // Restore auth session on refresh.
   useEffect(() => {
     let isActive = true;
@@ -323,24 +374,8 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       logger.info("[Nostr] Restoring session", {
         hasStoredNsec: Boolean(storedKeys?.sec),
         hasStoredExt: Boolean(storedKeys?.ext),
+        hasStoredEncryptedNsec: hasEncryptedNsec(),
       });
-
-      if (storedKeys?.sec) {
-        const restoredPubkey = await loginWithNsecInternal(storedKeys.sec);
-        if (!isActive) return;
-
-        if (restoredPubkey) {
-          if (storedKeys.pub !== restoredPubkey) {
-            saveStoredUserKeys({
-              pub: restoredPubkey,
-              sec: storedKeys.sec,
-            });
-          }
-          return;
-        }
-
-        clearStoredUserKeys();
-      }
 
       if (storedKeys?.ext) {
         const hasNip07 = await waitForNip07(7000);
@@ -370,6 +405,21 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return;
       }
 
+      if ((storedKeys?.encrypted || (!storedKeys?.sec && !storedKeys?.ext)) && hasEncryptedNsec()) {
+        setRequiresPinUnlock(true);
+        setPinUnlockError("");
+        setUser(undefined);
+        return;
+      }
+
+      if (storedKeys?.sec) {
+        // Security migration: stop restoring plaintext nsec sessions.
+        logger.warn("[Nostr] Found legacy plaintext nsec session; clearing stored keys");
+        clearStoredUserKeys();
+        setUser(undefined);
+        return;
+      }
+
       setUser(undefined);
     };
 
@@ -380,15 +430,26 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     };
   }, [loginWithNsecInternal, loginWithNip07Internal]);
 
-  const loginWith_nsec = async (nsec: string): Promise<boolean> => {
-    const pubkey = await loginWithNsecInternal(nsec);
-    if (pubkey) {
-      saveStoredUserKeys({
-        pub: pubkey,
-        sec: nsec,
-      });
-      clearLegacyAuthSession();
-      return true;
+  const loginWith_nsec = async (nsec: string, pin: string): Promise<boolean> => {
+    try {
+      setPinUnlockError("");
+      const pubkey = await loginWithNsecInternal(nsec);
+      if (pubkey) {
+        const encryptedNsec = await encryptNsec(nsec, pin);
+        saveEncryptedNsec(encryptedNsec);
+        saveStoredUserKeys({
+          pub: pubkey,
+          encrypted: true,
+        });
+        setRequiresPinUnlock(false);
+        clearLegacyAuthSession();
+        return true;
+      }
+    } catch (error) {
+      logger.error("[Nostr] Failed to encrypt and store nsec", error);
+      (ndk as any).signer = undefined;
+      setUser(undefined);
+      return false;
     }
     return false;
   };
@@ -404,6 +465,9 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
       const pubkey = await loginWithNip07Internal();
       if (pubkey) {
+        clearEncryptedNsec();
+        setRequiresPinUnlock(false);
+        setPinUnlockError("");
         saveStoredUserKeys({
           pub: pubkey,
           ext: true,
@@ -420,9 +484,12 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const logout = () => {
     clearStoredUserKeys();
+    clearEncryptedNsec();
     clearLegacyAuthSession();
     (ndk as any).signer = undefined;
     setUser(undefined);
+    setRequiresPinUnlock(false);
+    setPinUnlockError("");
   };
 
   const toggleTheme = () => {
@@ -459,7 +526,23 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   return (
-    <NostrContext.Provider value={{ ndk, user, login, loginWith_nsec, logout, theme, toggleTheme, connectionStatus, reconnect }}>
+    <NostrContext.Provider
+      value={{
+        ndk,
+        user,
+        login,
+        loginWith_nsec,
+        unlockWithPin,
+        requiresPinUnlock,
+        pinUnlockError,
+        dismissPinUnlock,
+        logout,
+        theme,
+        toggleTheme,
+        connectionStatus,
+        reconnect,
+      }}
+    >
       {children}
     </NostrContext.Provider>
   );
