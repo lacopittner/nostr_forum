@@ -1,7 +1,7 @@
-import NDK, { NDKPrivateKeySigner } from "@nostr-dev-kit/ndk";
+import NDK from "@nostr-dev-kit/ndk";
 
 // Default relay for first-time users
-const DEFAULT_RELAYS = ["ws://localhost:4433"];
+const DEFAULT_RELAYS: string[] = [];
 
 // Get relays from localStorage or use defaults
 export const getStoredRelays = (): string[] => {
@@ -9,7 +9,12 @@ export const getStoredRelays = (): string[] => {
   const stored = localStorage.getItem("nostr_relays");
   if (stored) {
     try {
-      return JSON.parse(stored);
+      const parsed = JSON.parse(stored);
+      if (!Array.isArray(parsed)) return DEFAULT_RELAYS;
+
+      return parsed.filter((relay): relay is string => {
+        return typeof relay === "string" && relay.trim().length > 0;
+      });
     } catch {
       return DEFAULT_RELAYS;
     }
@@ -23,36 +28,14 @@ export const saveStoredRelays = (relays: string[]) => {
   localStorage.setItem("nostr_relays", JSON.stringify(relays));
 };
 
-// Get dev key from environment (only for development!)
-const getDevKey = (): string | null => {
-  const devMode = import.meta.env.VITE_DEV_MODE === "true";
-  if (devMode) {
-    return import.meta.env.VITE_DEV_NSEC || null;
-  }
-  return null;
-};
-
 class NDKService {
   private static instance: NDK;
 
   public static getInstance(): NDK {
     if (!NDKService.instance) {
-      // Priority: Private key from env (for dev). For normal runtime, signer is set after login.
-      let signer;
-      
-      const devKey = getDevKey();
-      if (devKey) {
-        console.warn("Using development key - NOT FOR PRODUCTION!");
-        signer = new NDKPrivateKeySigner(devKey);
-      }
-
       const config: ConstructorParameters<typeof NDK>[0] = {
         explicitRelayUrls: getStoredRelays(),
       };
-
-      if (signer) {
-        config.signer = signer;
-      }
 
       NDKService.instance = new NDK(config);
     }

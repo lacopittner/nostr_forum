@@ -1,8 +1,8 @@
 import { NostrProvider, useNostr } from "./providers/NostrProvider";
 import { AppShell } from "./components/layout/AppShell";
 import { ArrowBigUp, ArrowBigDown, MessageSquare, Share2, Loader2, AlertCircle } from "lucide-react";
-import { useState, useEffect, useRef, useCallback } from "react";
-import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { NDKEvent, NDKFilter, NDKKind } from "@nostr-dev-kit/ndk";
 import { BrowserRouter as Router, Routes, Route, useNavigate } from "react-router-dom";
 import { ProfilePage } from "./pages/ProfilePage";
 import { SearchPage } from "./pages/SearchPage";
@@ -27,8 +27,27 @@ import { usePullToRefresh } from "./hooks/usePullToRefresh";
 import { useGlobalBlocks } from "./hooks/useGlobalBlocks";
 import { logger } from "./lib/logger";
 import { useToast } from "./lib/toast";
+import { SubscriptionManager } from "./lib/subscriptionManager";
 
 import { NDKProfile } from "./lib/types";
+
+type CommunityEntry = { id: string; pubkey: string; name: string; atag: string };
+
+const COMMUNITY_KIND = 34550;
+const COMMUNITY_LIST_KIND = 30001;
+const MAX_PROFILE_CACHE_SIZE = 500;
+const PUBKEY_REGEX = /^[0-9a-f]{64}$/i;
+const COMMUNITY_SUBSCRIPTION_KEY = "feed:communities";
+const FEED_STREAM_SUBSCRIPTION_KEY = "feed:stream";
+const REACTION_SUBSCRIPTION_PREFIX = "feed:reaction:";
+
+function parseCommunityATag(rawTag: string | undefined): { atag: string; pubkey: string; id: string } | null {
+  if (!rawTag) return null;
+  const [kind, pubkey, id] = rawTag.split(":");
+  if (kind !== String(COMMUNITY_KIND)) return null;
+  if (!id || !PUBKEY_REGEX.test(pubkey || "")) return null;
+  return { atag: rawTag, pubkey, id };
+}
 
 function Feed() {
   const { ndk, user } = useNostr();
@@ -43,7 +62,7 @@ function Feed() {
   const [feedFilter, setFeedFilter] = useState<"all" | "following">("all");
   
   // Communities for post creation
-  const [myCommunities, setMyCommunities] = useState<Array<{id: string, pubkey: string, name: string, atag: string}>>([]);
+  const [myCommunities, setMyCommunities] = useState<CommunityEntry[]>([]);
   
   // Fetch user's communities
   useEffect(() => {
@@ -52,20 +71,17 @@ function Feed() {
       return;
     }
 
-    let sub: ReturnType<typeof ndk.subscribe> | null = null;
     let isActive = true;
 
     const fetchCommunities = async () => {
       try {
-        // Fetch communities from user's membership list (kind 30001)
-        sub = ndk.subscribe(
-          {
-            kinds: [30001],
-            authors: [user.pubkey],
-            "#d": ["communities"]
-          },
-          { closeOnEose: true }
-        );
+        const membershipFilter: NDKFilter<number> = {
+          kinds: [COMMUNITY_LIST_KIND],
+          authors: [user.pubkey],
+          "#d": ["communities"],
+        };
+        const sub = ndk.subscribe(membershipFilter, { closeOnEose: true });
+        subscriptionManagerRef.current.replace(COMMUNITY_SUBSCRIPTION_KEY, sub);
 
         let latestEvent: NDKEvent | null = null;
 
@@ -83,55 +99,60 @@ function Feed() {
             return;
           }
 
-          const communityRefs = latestEvent.tags
-            .filter(t => t[0] === "a")
-            .map(t => t[1])
-            .filter(atag => atag.startsWith("34550:"));
+          const parsedRefs = latestEvent.tags
+            .map((tag) => (tag[0] === "a" ? parseCommunityATag(tag[1]) : null))
+            .filter((entry): entry is { atag: string; pubkey: string; id: string } => Boolean(entry));
+
+          const uniqueRefs = Array.from(
+            parsedRefs.reduce(
+              (acc, entry) => acc.set(entry.atag, entry),
+              new Map<string, { atag: string; pubkey: string; id: string }>()
+            ).values()
+          );
 
           const communityEntries = await Promise.all(
-            communityRefs.map(async (atag) => {
-              const [, pubkey, id] = atag.split(":");
-              const community = await ndk.fetchEvent({
-                kinds: [34550 as any],
+            uniqueRefs.map(async ({ atag, pubkey, id }) => {
+              const communityFilter: NDKFilter<number> = {
+                kinds: [COMMUNITY_KIND],
                 authors: [pubkey],
-                "#d": [id]
-              });
-
+                "#d": [id],
+              };
+              const community = await ndk.fetchEvent(communityFilter);
               if (!community) return null;
-              const name = community.tags.find(t => t[0] === "name")?.[1] || "Unnamed";
+
+              const name = community.tags.find((tag) => tag[0] === "name")?.[1] || "Unnamed";
               return { id, pubkey, name, atag };
             })
           );
 
-          const uniqueEntries = communityEntries.filter(
-            (entry): entry is { id: string; pubkey: string; name: string; atag: string } => Boolean(entry)
+          if (!isActive) return;
+          setMyCommunities(
+            communityEntries.filter((entry): entry is CommunityEntry => Boolean(entry))
           );
-
-          setMyCommunities(uniqueEntries);
         });
       } catch (error) {
         logger.error("Failed to fetch communities", error);
       }
     };
 
-    fetchCommunities();
+    void fetchCommunities();
 
     return () => {
       isActive = false;
-      if (sub) {
-        sub.stop();
-      }
+      subscriptionManagerRef.current.stop(COMMUNITY_SUBSCRIPTION_KEY);
     };
   }, [ndk, user]);
   
   // Pull to refresh
   const { isPulling, pullDistance, isRefreshing } = usePullToRefresh(async () => {
+    stopReactionSubscriptions();
     seenEventIds.current.clear();
     emptyScanWindows.current = 0;
     setIsFilterExhausted(false);
+    untilRef.current = undefined;
     setUntil(undefined);
     setHasMore(true);
-    await loadPosts(false, feedFilter);
+    await loadPosts(false, feedFilterRef.current);
   });
   
   // Infinite scroll state
@@ -153,10 +174,16 @@ function Feed() {
   const seenEventIds = useRef(new Set<string>());
   const profileFetchQueue = useRef(new Set<string>());
   const profilesRef = useRef<Record<string, NDKProfile>>({});
+  const profileOrderRef = useRef<string[]>([]);
   const commentCountFetchQueue = useRef(new Set<string>());
   const emptyScanWindows = useRef(0);
-  const sortByRef = useRef(sortBy);
   const blockedPubkeysRef = useRef(blockedPubkeys);
+  const followingRef = useRef(following);
+  const feedFilterRef = useRef(feedFilter);
+  const untilRef = useRef<number | undefined>(undefined);
+  const showErrorRef = useRef(showError);
+  const subscriptionManagerRef = useRef(new SubscriptionManager());
+  const loadPostsRequestRef = useRef(0);
 
   const isRedditLikePost = useCallback((event: NDKEvent): boolean => {
     const hasCommunityTag = event.tags.some(
@@ -189,12 +216,24 @@ function Feed() {
   }, [profiles]);
 
   useEffect(() => {
-    sortByRef.current = sortBy;
-  }, [sortBy]);
-
-  useEffect(() => {
     blockedPubkeysRef.current = blockedPubkeys;
   }, [blockedPubkeys]);
+
+  useEffect(() => {
+    followingRef.current = following;
+  }, [following]);
+
+  useEffect(() => {
+    feedFilterRef.current = feedFilter;
+  }, [feedFilter]);
+
+  useEffect(() => {
+    untilRef.current = until;
+  }, [until]);
+
+  useEffect(() => {
+    showErrorRef.current = showError;
+  }, [showError]);
 
   const fetchProfile = useCallback(async (pubkey: string) => {
     if (profilesRef.current[pubkey] || profileFetchQueue.current.has(pubkey)) return;
@@ -203,7 +242,24 @@ function Feed() {
     try {
       const profile = await ndk.getUser({ pubkey }).fetchProfile();
       if (profile) {
-        setProfiles(prev => ({ ...prev, [pubkey]: profile }));
+        setProfiles((prev) => {
+          if (prev[pubkey]) return prev;
+
+          const nextProfiles = { ...prev, [pubkey]: profile };
+          profileOrderRef.current.push(pubkey);
+
+          if (profileOrderRef.current.length <= MAX_PROFILE_CACHE_SIZE) {
+            return nextProfiles;
+          }
+
+          const oldestPubkey = profileOrderRef.current.shift();
+          if (!oldestPubkey || oldestPubkey === pubkey) {
+            return nextProfiles;
+          }
+
+          const { [oldestPubkey]: _evicted, ...trimmedProfiles } = nextProfiles;
+          return trimmedProfiles;
+        });
       }
     } catch (e) {
       logger.error("Failed to fetch profile:", pubkey, e);
@@ -238,88 +294,61 @@ function Feed() {
     }
   }, [ndk, isRedditLikeComment]);
 
-  // Initial fetch
-  useEffect(() => {
-    let isActive = true;
-    let postSub: ReturnType<typeof ndk.subscribe> | null = null;
+  const stopReactionSubscriptions = useCallback(() => {
+    subscriptionManagerRef.current.stopMatching((key) => key.startsWith(REACTION_SUBSCRIPTION_PREFIX));
+  }, []);
 
-    const startFeed = async () => {
-      await loadPosts();
-      if (!isActive) return;
+  const subscribeToReactions = useCallback((postId: string) => {
+    const subscriptionKey = `${REACTION_SUBSCRIPTION_PREFIX}${postId}`;
+    if (subscriptionManagerRef.current.has(subscriptionKey)) return;
 
-      // Subscribe to real-time updates only after initial fetch to avoid race-clears.
-      postSub = ndk.subscribe(
-        { kinds: [NDKKind.Text], limit: 10 },
-        { closeOnEose: false }
-      );
-
-      postSub.on("event", (event: NDKEvent) => {
-        if (blockedPubkeysRef.current.has(event.pubkey)) return;
-        if (!isRedditLikePost(event)) return;
-        if (seenEventIds.current.has(event.id)) return;
-        seenEventIds.current.add(event.id);
-
-        fetchProfile(event.pubkey);
-
-        setPosts(prev => {
-          const exists = prev.find(p => p.id === event.id);
-          if (exists) return prev;
-          const newPosts = [event, ...prev];
-          return sortPosts(newPosts, sortByRef.current);
-        });
-
-        subscribeToReactions(event.id);
-        fetchCommentCount(event.id);
-      });
-    };
-
-    startFeed();
-
-    return () => {
-      isActive = false;
-      if (postSub) {
-        postSub.stop();
-      }
-    };
-  }, [ndk, fetchProfile, fetchCommentCount, isRedditLikePost]);
-
-  const subscribeToReactions = (postId: string) => {
-    ndk.subscribe(
+    const reactionSub = ndk.subscribe(
       { kinds: [NDKKind.Reaction], "#e": [postId] },
       { closeOnEose: true }
-    ).on("event", (reactionEvent: NDKEvent) => {
+    );
+    const deletionSub = ndk.subscribe(
+      { kinds: [NDKKind.EventDeletion], "#e": [postId] },
+      { closeOnEose: true }
+    );
+    subscriptionManagerRef.current.trackPairUntilEose(subscriptionKey, reactionSub, deletionSub);
+
+    reactionSub.on("event", (reactionEvent: NDKEvent) => {
       if (seenEventIds.current.has(reactionEvent.id)) return;
       seenEventIds.current.add(reactionEvent.id);
       processIncomingReaction(reactionEvent);
     });
-    
-    ndk.subscribe(
-      { kinds: [5], "#e": [postId] },
-      { closeOnEose: true }
-    ).on("event", (deletionEvent: NDKEvent) => {
+
+    deletionSub.on("event", (deletionEvent: NDKEvent) => {
       processIncomingDeletion(deletionEvent);
     });
-  };
+  }, [ndk, processIncomingReaction, processIncomingDeletion]);
 
-  const loadPosts = async (
+  const loadPosts = useCallback(async (
     loadMore = false,
-    selectedFeedFilter: "all" | "following" = feedFilter,
+    selectedFeedFilter: "all" | "following" = feedFilterRef.current,
     forceDeepScan = false
   ) => {
+    const requestId = loadPostsRequestRef.current + 1;
+    loadPostsRequestRef.current = requestId;
+    const isStaleRequest = () => requestId !== loadPostsRequestRef.current;
+
     if (loadMore) {
       setIsLoadingMore(true);
     }
 
     try {
-      const baseFilter: any = { 
-        kinds: [NDKKind.Text], 
-        limit: FETCH_BATCH_SIZE
+      const baseFilter: NDKFilter<number> = {
+        kinds: [NDKKind.Text],
+        limit: FETCH_BATCH_SIZE,
       };
-      
-      // Filter by following if selected
+
+      // Filter by following if selected.
       if (selectedFeedFilter === "following") {
-        const followedAuthors = Array.from(following).filter(pubkey => !blockedPubkeys.has(pubkey));
+        const followedAuthors = Array.from(followingRef.current).filter(
+          (pubkey) => !blockedPubkeysRef.current.has(pubkey)
+        );
         if (followedAuthors.length === 0) {
+          if (isStaleRequest()) return;
           if (!loadMore) {
             setPosts([]);
           }
@@ -333,7 +362,7 @@ function Feed() {
       }
 
       // Scan multiple batches in one request to skip reply-heavy ranges faster.
-      let scanUntil = loadMore ? until : undefined;
+      let scanUntil = loadMore ? untilRef.current : undefined;
       let oldestFetchedAt: number | undefined = scanUntil;
       let reachedEnd = false;
       let batchesScanned = 0;
@@ -341,12 +370,16 @@ function Feed() {
       const nextVisiblePosts: NDKEvent[] = [];
 
       while (batchesScanned < scanBatchLimit && nextVisiblePosts.length < POSTS_PER_PAGE) {
-        const filter = {
+        if (isStaleRequest()) return;
+
+        const filter: NDKFilter<number> = {
           ...baseFilter,
-          ...(scanUntil ? { until: scanUntil - 1 } : {})
+          ...(scanUntil ? { until: scanUntil - 1 } : {}),
         };
 
         const fetchedEvents = await ndk.fetchEvents(filter, { closeOnEose: true });
+        if (isStaleRequest()) return;
+
         const fetchedEventList = Array.from(fetchedEvents).sort(
           (a, b) => (b.created_at || 0) - (a.created_at || 0)
         );
@@ -366,8 +399,8 @@ function Feed() {
         scanUntil = batchOldest;
         batchesScanned += 1;
 
-        const visibleInBatch = fetchedEventList.filter(event => {
-          if (blockedPubkeys.has(event.pubkey)) return false;
+        const visibleInBatch = fetchedEventList.filter((event) => {
+          if (blockedPubkeysRef.current.has(event.pubkey)) return false;
           if (!isRedditLikePost(event)) return false;
           if (seenEventIds.current.has(event.id)) return false;
           seenEventIds.current.add(event.id);
@@ -375,7 +408,7 @@ function Feed() {
         });
 
         if (visibleInBatch.length > 0) {
-          visibleInBatch.forEach(event => {
+          visibleInBatch.forEach((event) => {
             fetchProfile(event.pubkey);
             subscribeToReactions(event.id);
             fetchCommentCount(event.id);
@@ -389,17 +422,17 @@ function Feed() {
         }
       }
 
+      if (isStaleRequest()) return;
+
       if (oldestFetchedAt) {
+        untilRef.current = oldestFetchedAt;
         setUntil(oldestFetchedAt);
       }
 
       if (nextVisiblePosts.length > 0) {
         emptyScanWindows.current = 0;
         setIsFilterExhausted(false);
-        setPosts(prev => {
-          const combined = loadMore ? [...prev, ...nextVisiblePosts] : nextVisiblePosts;
-          return sortPosts(combined, sortBy);
-        });
+        setPosts((prev) => (loadMore ? [...prev, ...nextVisiblePosts] : nextVisiblePosts));
       }
 
       if (forceDeepScan && nextVisiblePosts.length === 0 && !reachedEnd) {
@@ -416,32 +449,98 @@ function Feed() {
       setIsFilterExhausted(exhaustedByFiltering);
       setHasMore(!reachedEnd && !exhaustedByFiltering && Boolean(oldestFetchedAt));
     } catch (error) {
+      if (isStaleRequest()) return;
       logger.error("Failed to fetch posts:", error);
-      showError("Failed to load posts. Please check your connection.");
+      showErrorRef.current("Failed to load posts. Please check your connection.");
     } finally {
-      setIsLoadingMore(false);
+      if (!isStaleRequest()) {
+        setIsLoadingMore(false);
+      }
     }
-  };
+  }, [
+    FETCH_BATCH_SIZE,
+    MAX_BATCHES_PER_REQUEST,
+    POSTS_PER_PAGE,
+    ndk,
+    fetchProfile,
+    fetchCommentCount,
+    isRedditLikePost,
+    subscribeToReactions,
+  ]);
 
-  const resetFeedAndLoad = (nextFilter: "all" | "following") => {
+  // Initial fetch and live updates.
+  useEffect(() => {
+    let isActive = true;
+
+    const startFeed = async () => {
+      await loadPosts(false, feedFilterRef.current);
+      if (!isActive) return;
+
+      const postSub = ndk.subscribe(
+        { kinds: [NDKKind.Text], limit: 10 },
+        { closeOnEose: false }
+      );
+      subscriptionManagerRef.current.replace(FEED_STREAM_SUBSCRIPTION_KEY, postSub);
+
+      postSub.on("event", (event: NDKEvent) => {
+        if (!isActive) return;
+        if (blockedPubkeysRef.current.has(event.pubkey)) return;
+        if (!isRedditLikePost(event)) return;
+        if (seenEventIds.current.has(event.id)) return;
+        seenEventIds.current.add(event.id);
+
+        fetchProfile(event.pubkey);
+        setPosts((prev) => {
+          if (prev.some((post) => post.id === event.id)) {
+            return prev;
+          }
+          return [event, ...prev];
+        });
+
+        subscribeToReactions(event.id);
+        fetchCommentCount(event.id);
+      });
+    };
+
+    void startFeed();
+
+    return () => {
+      isActive = false;
+      loadPostsRequestRef.current += 1;
+      subscriptionManagerRef.current.stop(FEED_STREAM_SUBSCRIPTION_KEY);
+      stopReactionSubscriptions();
+    };
+  }, [
+    ndk,
+    loadPosts,
+    fetchProfile,
+    fetchCommentCount,
+    isRedditLikePost,
+    subscribeToReactions,
+    stopReactionSubscriptions,
+  ]);
+
+  const resetFeedAndLoad = useCallback((nextFilter: "all" | "following") => {
+    stopReactionSubscriptions();
     setFeedFilter(nextFilter);
     setPosts([]);
     setCommentCounts({});
     seenEventIds.current.clear();
     emptyScanWindows.current = 0;
     setIsFilterExhausted(false);
+    untilRef.current = undefined;
     setUntil(undefined);
     setHasMore(true);
-    loadPosts(false, nextFilter);
-  };
+    void loadPosts(false, nextFilter);
+  }, [loadPosts, stopReactionSubscriptions]);
 
-  const loadMore = () => {
+  const loadMore = useCallback(() => {
     if (!isLoadingMore && hasMore) {
-      loadPosts(true);
+      void loadPosts(true);
     }
-  };
+  }, [isLoadingMore, hasMore, loadPosts]);
 
-  const sortPosts = (postList: NDKEvent[], sort: "hot" | "new" | "top"): NDKEvent[] => {
+  const sortPosts = useCallback((postList: NDKEvent[], sort: "hot" | "new" | "top"): NDKEvent[] => {
     return [...postList].sort((a, b) => {
       if (sort === "new") {
         return (b.created_at || 0) - (a.created_at || 0);
@@ -450,21 +549,19 @@ function Feed() {
         const scoreB = reactions[b.id] || 0;
         if (scoreB !== scoreA) return scoreB - scoreA;
         return (b.created_at || 0) - (a.created_at || 0);
-      } else {
-        const scoreA = reactions[a.id] || 0;
-        const scoreB = reactions[b.id] || 0;
-        const ageA = Date.now() / 1000 - (a.created_at || 0);
-        const ageB = Date.now() / 1000 - (b.created_at || 0);
-        const hotA = scoreA / Math.log(ageA + 2);
-        const hotB = scoreB / Math.log(ageB + 2);
-        return hotB - hotA;
       }
-    });
-  };
 
-  useEffect(() => {
-    setPosts(prev => sortPosts(prev, sortBy));
-  }, [sortBy, reactions]);
+      const scoreA = reactions[a.id] || 0;
+      const scoreB = reactions[b.id] || 0;
+      const ageA = Date.now() / 1000 - (a.created_at || 0);
+      const ageB = Date.now() / 1000 - (b.created_at || 0);
+      const hotA = scoreA / Math.log(ageA + 2);
+      const hotB = scoreB / Math.log(ageB + 2);
+      return hotB - hotA;
+    });
+  }, [reactions]);
+
+  const sortedPosts = useMemo(() => sortPosts(posts, sortBy), [posts, sortBy, sortPosts]);
 
   const handleVote = (post: NDKEvent, type: "UPVOTE" | "DOWNVOTE") => {
     handleReaction(post, type);
@@ -545,12 +642,7 @@ function Feed() {
       seenEventIds.current.delete(targetPost.id);
       seenEventIds.current.add(replacement.id);
 
-      setPosts((prev) =>
-        sortPosts(
-          prev.map((p) => (p.id === postId ? replacement : p)),
-          sortBy
-        )
-      );
+      setPosts((prev) => prev.map((p) => (p.id === postId ? replacement : p)));
       setCommentCounts((prev) => {
         const next = { ...prev };
         delete next[postId];
@@ -613,12 +705,14 @@ function Feed() {
           communities={myCommunities}
           onPostCreated={() => {
             // Refresh posts after creating
+            stopReactionSubscriptions();
             seenEventIds.current.clear();
             emptyScanWindows.current = 0;
             setIsFilterExhausted(false);
+            untilRef.current = undefined;
             setUntil(undefined);
             setHasMore(true);
-            loadPosts(false, feedFilter);
+            void loadPosts(false, feedFilterRef.current);
           }}
         />
       )}
@@ -648,19 +742,19 @@ function Feed() {
           </div>
         )}
         
-        {posts.length === 0 && !isLoadingMore && (
+        {sortedPosts.length === 0 && !isLoadingMore && (
           <div className="relative overflow-hidden bg-gradient-to-br from-[var(--primary)] to-[var(--primary-light)] rounded-2xl p-6 sm:p-8 text-white shadow-lg">
             <div className="relative z-10">
               <h1 className="text-3xl sm:text-4xl font-black tracking-tighter mb-2">The Relay is Quiet...</h1>
               <p className="text-white/80 text-sm sm:text-base max-w-xl leading-relaxed">
-                Successfully connected to ws://localhost:4433. Be the first to start the conversation on your local relay!
+                No posts yet. Add relays in Relay Management and be the first to start the conversation.
               </p>
             </div>
           </div>
         )}
       
         {/* Sorting and Feed Filter Controls */}
-        {posts.length > 0 && (
+        {sortedPosts.length > 0 && (
           <div className="flex items-center justify-between bg-card border rounded-xl p-3 shadow-sm">
             <div className="flex items-center gap-4">
               {/* Feed Filter */}
@@ -722,7 +816,7 @@ function Feed() {
           noMoreText={isFilterExhausted ? "Reached scan limit. You can load older posts manually." : "No more posts"}
         >
           <div className="flex flex-col space-y-2">
-            {posts.map((post) => (
+            {sortedPosts.map((post) => (
               <article 
                 key={post.id} 
                 className="bg-card border border-border/50 hover:border-[var(--primary)]/30 transition-colors group cursor-pointer"
@@ -879,7 +973,9 @@ function Feed() {
         {isFilterExhausted && !isLoadingMore && (
           <div className="flex justify-center">
             <button
-              onClick={() => loadPosts(true, feedFilter, true)}
+              onClick={() => {
+                void loadPosts(true, feedFilterRef.current, true);
+              }}
               className="px-4 py-2 rounded-full border border-border bg-accent/40 hover:bg-accent text-sm font-bold transition-colors"
             >
               Load older posts

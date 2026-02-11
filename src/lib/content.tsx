@@ -1,5 +1,6 @@
 // Content processing utilities for Nostr posts
 import { ReactNode } from "react";
+import { Link } from "react-router-dom";
 
 const URL_REGEX = /(https?:\/\/[^\s]+)/g;
 const IMAGE_REGEX = /(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp|svg))/gi;
@@ -76,34 +77,27 @@ function parseText(content: string): ReactNode[] {
       );
     } else if (NOSTR_MENTION_REGEX.test(matched)) {
       const npub = matched.replace('nostr:', '');
+      const profilePath = `/profile/${encodeURIComponent(npub)}`;
       parts.push(
-        <a
+        <Link
           key={`mention-${match.index}`}
-          href={`/profile/${npub}`}
+          to={profilePath}
           className="text-[var(--primary)] hover:underline font-medium"
-          onClick={(e) => {
-            e.preventDefault();
-            // Navigate programmatically
-            window.location.href = `/profile/${npub}`;
-          }}
         >
           {npub.slice(0, 8)}...{npub.slice(-4)}
-        </a>
+        </Link>
       );
     } else if (HASHTAG_REGEX.test(matched)) {
       const tag = matched.slice(1);
+      const searchPath = `/search?q=${encodeURIComponent(tag)}`;
       parts.push(
-        <a
+        <Link
           key={`tag-${match.index}`}
-          href={`/search?q=${tag}`}
+          to={searchPath}
           className="text-[var(--primary)] hover:underline"
-          onClick={(e) => {
-            e.preventDefault();
-            window.location.href = `/search?q=${tag}`;
-          }}
         >
           {matched}
-        </a>
+        </Link>
       );
     } else if (URL_REGEX.test(matched)) {
       parts.push(

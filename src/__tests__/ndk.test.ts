@@ -5,7 +5,7 @@ describe('NDK Utils', () => {
   it('should return default relays when localStorage is empty', () => {
     localStorage.getItem = () => null;
     const relays = getStoredRelays();
-    expect(relays).toEqual(['ws://localhost:4433']);
+    expect(relays).toEqual([]);
   });
 
   it('should parse stored relays from localStorage', () => {
@@ -26,6 +26,12 @@ describe('NDK Utils', () => {
   it('should handle invalid JSON in localStorage', () => {
     localStorage.getItem = () => 'invalid-json';
     const relays = getStoredRelays();
-    expect(relays).toEqual(['ws://localhost:4433']);
+    expect(relays).toEqual([]);
+  });
+
+  it('should ignore non-array values in localStorage', () => {
+    localStorage.getItem = () => JSON.stringify({ relay: 'wss://relay1.com' });
+    const relays = getStoredRelays();
+    expect(relays).toEqual([]);
   });
 });
