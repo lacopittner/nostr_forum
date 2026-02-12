@@ -15,6 +15,7 @@ import { ConnectionStatus } from "./components/ConnectionStatus";
 import { ToastContainer } from "./components/Toast";
 import { FeedList } from "./components/feed/FeedList";
 import { useFeed } from "./hooks/useFeed";
+import { PwaBanner } from "./components/PwaBanner";
 
 function Feed() {
   const {
@@ -113,6 +114,7 @@ function App() {
           <AppShell>
             <ConnectionStatus />
             <ToastContainer />
+            <PwaBanner />
             <Routes>
               <Route path="/" element={<Feed />} />
               <Route path="/explore" element={<ExplorePage />} />

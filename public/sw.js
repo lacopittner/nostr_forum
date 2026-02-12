@@ -1,124 +1,143 @@
-/// <reference lib="webworker" />
+const CACHE_VERSION = "v4";
+const APP_SHELL_CACHE = `nostr-reddit-shell-${CACHE_VERSION}`;
+const RUNTIME_CACHE = `nostr-reddit-runtime-${CACHE_VERSION}`;
+const IMAGE_CACHE = `nostr-reddit-images-${CACHE_VERSION}`;
 
-// Simple service worker for PWA offline support
-const CACHE_NAME = "nostr-reddit-v1";
+const SCOPE_URL = new URL(self.registration.scope);
+const BASE_PATH = SCOPE_URL.pathname.endsWith("/") ? SCOPE_URL.pathname : `${SCOPE_URL.pathname}/`;
+const withBase = (assetPath) => new URL(assetPath, SCOPE_URL).pathname;
 
-// Assets to cache on install
-const STATIC_ASSETS = [
-  "/",
-  "/index.html",
-  "/manifest.json",
-  "/vite.svg"
+const APP_SHELL_INDEX = withBase("index.html");
+const APP_SHELL_ASSETS = [
+  withBase("./"),
+  APP_SHELL_INDEX,
+  withBase("manifest.json"),
+  withBase("icon-192.png"),
+  withBase("icon-512.png"),
+  withBase("icon-192.svg"),
+  withBase("icon-512.svg"),
 ];
 
-// Install event - cache static assets
-self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
-    })
-  );
-  // Activate immediately
-  self.skipWaiting();
-});
+const CACHES_TO_KEEP = [APP_SHELL_CACHE, RUNTIME_CACHE, IMAGE_CACHE];
 
-// Activate event - clean up old caches
-self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames
-          .filter((name) => name !== CACHE_NAME)
-          .map((name) => caches.delete(name))
-      );
-    })
-  );
-  self.clients.claim();
-});
+const shouldHandleRequest = (request) =>
+  request.method === "GET" && request.url.startsWith("http");
 
-// Image caching strategy
-const isImage = (url) => {
-  return /\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)(\?.*)?$/i.test(url) ||
-         url.includes('nostr.build') ||
-         url.includes('imgur.com') ||
-         url.includes('pbs.twimg.com') ||
-         url.includes('i.imgur.com');
+const isNavigationRequest = (request) => request.mode === "navigate";
+const isStaticAssetRequest = (request) =>
+  ["script", "style", "font", "worker"].includes(request.destination);
+
+const isImageRequest = (request, url) =>
+  request.destination === "image" ||
+  /\.(jpg|jpeg|png|gif|webp|svg|bmp|ico|avif)(\?.*)?$/i.test(url.pathname) ||
+  url.hostname.includes("nostr.build") ||
+  url.hostname.includes("imgur.com") ||
+  url.hostname.includes("pbs.twimg.com");
+
+const putInCache = async (cacheName, request, response) => {
+  if (!response || (!response.ok && response.type !== "opaque")) {
+    return;
+  }
+  const cache = await caches.open(cacheName);
+  await cache.put(request, response.clone());
 };
 
-// Fetch event - serve from cache or network
+const staleWhileRevalidate = async (request, cacheName) => {
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(request);
+
+  const networkPromise = fetch(request)
+    .then((response) => {
+      void putInCache(cacheName, request, response);
+      return response;
+    })
+    .catch(() => cached);
+
+  return cached || networkPromise || new Response("Offline", { status: 503 });
+};
+
+const cacheFirst = async (request, cacheName) => {
+  const cached = await caches.match(request);
+  if (cached) {
+    return cached;
+  }
+
+  try {
+    const response = await fetch(request);
+    void putInCache(cacheName, request, response);
+    return response;
+  } catch {
+    return new Response("Offline", { status: 503 });
+  }
+};
+
+const networkFirstNavigation = async (request) => {
+  try {
+    const response = await fetch(request);
+    void putInCache(RUNTIME_CACHE, request, response);
+    return response;
+  } catch {
+    const cached = await caches.match(request);
+    if (cached) {
+      return cached;
+    }
+    const fallback = await caches.match(APP_SHELL_INDEX);
+    if (fallback) {
+      return fallback;
+    }
+    return new Response("Offline", { status: 503 });
+  }
+};
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(APP_SHELL_CACHE).then((cache) => cache.addAll(APP_SHELL_ASSETS))
+  );
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    (async () => {
+      const cacheNames = await caches.keys();
+      await Promise.all(
+        cacheNames
+          .filter((cacheName) => !CACHES_TO_KEEP.includes(cacheName))
+          .map((cacheName) => caches.delete(cacheName))
+      );
+      await self.clients.claim();
+    })()
+  );
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
+  if (!shouldHandleRequest(request)) return;
 
-  // Skip non-GET requests
-  if (request.method !== "GET") return;
+  const url = new URL(request.url);
+  if (url.pathname.startsWith(`${BASE_PATH}api/`) || url.pathname.startsWith("/api/")) return;
 
-  // Skip WebSocket requests (Nostr relays)
-  if (request.url.startsWith("ws://") || request.url.startsWith("wss://")) return;
-
-  // Skip browser extension requests
-  if (request.url.startsWith("chrome-extension://")) return;
-  if (request.url.startsWith("moz-extension://")) return;
-
-  // Handle images with stale-while-revalidate strategy
-  if (isImage(request.url)) {
-    event.respondWith(
-      caches.open(CACHE_NAME + "-images").then(async (cache) => {
-        const cached = await cache.match(request);
-        
-        // Return cached immediately
-        const fetchPromise = fetch(request).then((response) => {
-          if (response.ok) {
-            cache.put(request, response.clone());
-          }
-          return response;
-        }).catch(() => cached); // Fallback to cache on error
-        
-        return cached || fetchPromise;
-      })
-    );
+  if (isNavigationRequest(request)) {
+    event.respondWith(networkFirstNavigation(request));
     return;
   }
 
-  // Skip API calls
-  if (request.url.includes("/api/")) return;
+  if (isImageRequest(request, url)) {
+    event.respondWith(staleWhileRevalidate(request, IMAGE_CACHE));
+    return;
+  }
 
-  event.respondWith(
-    caches.match(request).then((cached) => {
-      // Return cached version or fetch from network
-      if (cached) {
-        // Refresh cache in background
-        fetch(request)
-          .then((response) => {
-            if (response.ok) {
-              caches.open(CACHE_NAME).then((cache) => {
-                cache.put(request, response);
-              });
-            }
-          })
-          .catch(() => {
-            // Network failed, cached version is fine
-          });
-        return cached;
-      }
+  if (url.origin === self.location.origin && isStaticAssetRequest(request)) {
+    event.respondWith(staleWhileRevalidate(request, RUNTIME_CACHE));
+    return;
+  }
 
-      return fetch(request)
-        .then((response) => {
-          // Cache successful responses
-          if (response.ok && response.type === "basic") {
-            const responseClone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, responseClone);
-            });
-          }
-          return response;
-        })
-        .catch(() => {
-          // Network failed, return offline page for navigation requests
-          if (request.mode === "navigate") {
-            return caches.match("/index.html");
-          }
-          return new Response("Network error", { status: 408 });
-        });
-    })
-  );
+  if (url.origin === self.location.origin) {
+    event.respondWith(cacheFirst(request, RUNTIME_CACHE));
+  }
 });

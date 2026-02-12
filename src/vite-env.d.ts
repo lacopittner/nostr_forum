@@ -12,6 +12,19 @@ interface ImportMeta {
 
 // NIP-07 window.nostr extension interface
 declare global {
+  interface BeforeInstallPromptEvent extends Event {
+    readonly platforms: string[];
+    readonly userChoice: Promise<{
+      outcome: "accepted" | "dismissed";
+      platform: string;
+    }>;
+    prompt(): Promise<void>;
+  }
+
+  interface Navigator {
+    standalone?: boolean;
+  }
+
   interface Window {
     nostr?: {
       getPublicKey(): Promise<string>;
