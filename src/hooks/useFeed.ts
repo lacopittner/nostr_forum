@@ -34,6 +34,25 @@ function parseCommunityATag(rawTag: string | undefined): { atag: string; pubkey:
   return { atag: rawTag, pubkey, id };
 }
 
+function getEventDedupKey(event: NDKEvent): string {
+  if (event.id) return event.id;
+  return `${event.pubkey}:${event.kind}:${event.created_at || 0}:${event.content}`;
+}
+
+function mergeUniquePosts(existing: NDKEvent[], incoming: NDKEvent[]): NDKEvent[] {
+  const seen = new Set<string>();
+  const merged: NDKEvent[] = [];
+
+  for (const event of [...existing, ...incoming]) {
+    const eventKey = getEventDedupKey(event);
+    if (seen.has(eventKey)) continue;
+    seen.add(eventKey);
+    merged.push(event);
+  }
+
+  return merged;
+}
+
 export function useFeed() {
   const { ndk, user } = useNostr();
   const { error: showError, success } = useToast();
@@ -213,8 +232,9 @@ export function useFeed() {
       subscriptionManagerRef.current.trackPairUntilEose(subscriptionKey, reactionSub, deletionSub);
 
       reactionSub.on("event", (reactionEvent: NDKEvent) => {
-        if (seenEventIds.current.has(reactionEvent.id)) return;
-        seenEventIds.current.add(reactionEvent.id);
+        const reactionKey = getEventDedupKey(reactionEvent);
+        if (seenEventIds.current.has(reactionKey)) return;
+        seenEventIds.current.add(reactionKey);
         processIncomingReaction(reactionEvent);
       });
 
@@ -303,8 +323,9 @@ export function useFeed() {
           const visibleInBatch = fetchedEventList.filter((event) => {
             if (blockedPubkeysRef.current.has(event.pubkey)) return false;
             if (!isRedditLikePost(event)) return false;
-            if (seenEventIds.current.has(event.id)) return false;
-            seenEventIds.current.add(event.id);
+            const eventKey = getEventDedupKey(event);
+            if (seenEventIds.current.has(eventKey)) return false;
+            seenEventIds.current.add(eventKey);
             return true;
           });
 
@@ -333,7 +354,9 @@ export function useFeed() {
         if (nextVisiblePosts.length > 0) {
           emptyScanWindows.current = 0;
           setIsFilterExhausted(false);
-          setPosts((prev) => (loadMore ? [...prev, ...nextVisiblePosts] : nextVisiblePosts));
+          setPosts((prev) => (loadMore ? mergeUniquePosts(prev, nextVisiblePosts) : mergeUniquePosts([], nextVisiblePosts)));
+        } else if (!loadMore) {
+          setPosts([]);
         }
 
         if (forceDeepScan && nextVisiblePosts.length === 0 && !reachedEnd) {
@@ -465,16 +488,12 @@ export function useFeed() {
         if (!isActive) return;
         if (blockedPubkeysRef.current.has(event.pubkey)) return;
         if (!isRedditLikePost(event)) return;
-        if (seenEventIds.current.has(event.id)) return;
-        seenEventIds.current.add(event.id);
+        const eventKey = getEventDedupKey(event);
+        if (seenEventIds.current.has(eventKey)) return;
+        seenEventIds.current.add(eventKey);
 
         void fetchProfile(event.pubkey);
-        setPosts((prev) => {
-          if (prev.some((post) => post.id === event.id)) {
-            return prev;
-          }
-          return [event, ...prev];
-        });
+        setPosts((prev) => mergeUniquePosts([event], prev));
 
         subscribeToReactions(event.id);
         void fetchCommentCount(event.id);
@@ -625,8 +644,8 @@ export function useFeed() {
         ];
         await replacement.publish();
 
-        seenEventIds.current.delete(targetPost.id);
-        seenEventIds.current.add(replacement.id);
+        seenEventIds.current.delete(getEventDedupKey(targetPost));
+        seenEventIds.current.add(getEventDedupKey(replacement));
 
         setPosts((prev) => prev.map((post) => (post.id === postId ? replacement : post)));
         setCommentCounts((prev) => {

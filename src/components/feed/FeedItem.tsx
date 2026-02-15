@@ -10,6 +10,7 @@ import { NDKProfile } from "../../lib/types";
 
 interface FeedItemProps {
   post: NDKEvent;
+  isAuthenticated: boolean;
   profile?: NDKProfile;
   reactionScore: number;
   userVote?: "UPVOTE" | "DOWNVOTE" | null;
@@ -30,6 +31,7 @@ interface FeedItemProps {
 
 export function FeedItem({
   post,
+  isAuthenticated,
   profile,
   reactionScore,
   userVote,
@@ -58,33 +60,37 @@ export function FeedItem({
   const handleUpvote = useCallback(
     (event: ReactMouseEvent<HTMLButtonElement>) => {
       event.stopPropagation();
+      if (!isAuthenticated) return;
       onVote(post, "UPVOTE");
     },
-    [onVote, post]
+    [isAuthenticated, onVote, post]
   );
 
   const handleDownvote = useCallback(
     (event: ReactMouseEvent<HTMLButtonElement>) => {
       event.stopPropagation();
+      if (!isAuthenticated) return;
       onVote(post, "DOWNVOTE");
     },
-    [onVote, post]
+    [isAuthenticated, onVote, post]
   );
 
   const handleCommentClick = useCallback(
     (event: ReactMouseEvent<HTMLButtonElement>) => {
       event.stopPropagation();
+      if (!isAuthenticated) return;
       onOpenPost(post.id);
     },
-    [onOpenPost, post.id]
+    [isAuthenticated, onOpenPost, post.id]
   );
 
   const handleToggleReply = useCallback(
     (event: ReactMouseEvent<HTMLButtonElement>) => {
       event.stopPropagation();
+      if (!isAuthenticated) return;
       onToggleReply(post.id);
     },
-    [onToggleReply, post.id]
+    [isAuthenticated, onToggleReply, post.id]
   );
 
   const handleReplyChange = useCallback(
@@ -104,6 +110,8 @@ export function FeedItem({
 
   const authorName = profile?.displayName || profile?.name || `npub...${post.pubkey.slice(-8)}`;
 
+  const actionDisabledClass = "opacity-40 cursor-not-allowed text-muted-foreground";
+
   return (
     <article
       className="bg-card border border-border/50 hover:border-[var(--primary)]/30 transition-colors group cursor-pointer"
@@ -113,8 +121,14 @@ export function FeedItem({
         <div className="w-10 bg-accent/20 flex flex-col items-center py-2 space-y-0.5">
           <button
             onClick={handleUpvote}
-            disabled={isVoting}
-            className={`p-1 rounded transition-colors ${userVote === "UPVOTE" ? "text-[var(--primary)]" : "text-muted-foreground hover:bg-accent hover:text-[var(--primary)]"} ${isVoting ? "opacity-50 cursor-not-allowed" : ""}`}
+            disabled={isVoting || !isAuthenticated}
+            className={`p-1 rounded transition-colors ${
+              !isAuthenticated
+                ? actionDisabledClass
+                : userVote === "UPVOTE"
+                  ? "text-[var(--primary)]"
+                  : "text-muted-foreground hover:bg-accent hover:text-[var(--primary)]"
+            } ${isVoting ? "opacity-50 cursor-not-allowed" : ""}`}
           >
             <ArrowBigUp size={22} fill={userVote === "UPVOTE" ? "currentColor" : "none"} />
           </button>
@@ -131,8 +145,14 @@ export function FeedItem({
           </span>
           <button
             onClick={handleDownvote}
-            disabled={isVoting}
-            className={`p-1 rounded transition-colors ${userVote === "DOWNVOTE" ? "text-blue-600" : "text-muted-foreground hover:bg-accent hover:text-blue-600"} ${isVoting ? "opacity-50 cursor-not-allowed" : ""}`}
+            disabled={isVoting || !isAuthenticated}
+            className={`p-1 rounded transition-colors ${
+              !isAuthenticated
+                ? actionDisabledClass
+                : userVote === "DOWNVOTE"
+                  ? "text-blue-600"
+                  : "text-muted-foreground hover:bg-accent hover:text-blue-600"
+            } ${isVoting ? "opacity-50 cursor-not-allowed" : ""}`}
           >
             <ArrowBigDown size={22} fill={userVote === "DOWNVOTE" ? "currentColor" : "none"} />
           </button>
@@ -155,7 +175,12 @@ export function FeedItem({
           <div className="flex items-center gap-1">
             <button
               onClick={handleCommentClick}
-              className="flex items-center gap-1.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground hover:text-foreground text-xs font-bold"
+              disabled={!isAuthenticated}
+              className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-colors text-xs font-bold ${
+                isAuthenticated
+                  ? "text-muted-foreground hover:bg-accent hover:text-foreground"
+                  : actionDisabledClass
+              }`}
             >
               <MessageSquare size={16} />
               <span>{`${commentCount} comments`}</span>
@@ -163,7 +188,12 @@ export function FeedItem({
 
             <button
               onClick={handleToggleReply}
-              className="flex items-center gap-1.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground hover:text-foreground text-xs font-bold"
+              disabled={!isAuthenticated}
+              className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-colors text-xs font-bold ${
+                isAuthenticated
+                  ? "text-muted-foreground hover:bg-accent hover:text-foreground"
+                  : actionDisabledClass
+              }`}
             >
               <MessageSquare size={16} />
               <span>Reply</span>
@@ -171,26 +201,33 @@ export function FeedItem({
 
             <button
               onClick={stopPropagation}
-              className="flex items-center gap-1.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground hover:text-foreground text-xs font-bold"
+              disabled={!isAuthenticated}
+              className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-colors text-xs font-bold ${
+                isAuthenticated
+                  ? "text-muted-foreground hover:bg-accent hover:text-foreground"
+                  : actionDisabledClass
+              }`}
             >
               <Share2 size={16} />
               <span>Share</span>
             </button>
 
             <div onClick={stopPropagation} className="flex items-center">
-              <SavePostButton post={post} size="sm" />
+              <SavePostButton post={post} size="sm" disabled={!isAuthenticated} />
             </div>
 
             <div onClick={stopPropagation} className="flex items-center">
               <ZapButton targetPubkey={post.pubkey} eventId={post.id} size="sm" />
             </div>
 
-            <div className="ml-auto" onClick={stopPropagation}>
-              <PostActionsMenu post={post} onEdit={onEditPost} onDelete={onDeletePost} />
-            </div>
+            {isAuthenticated && (
+              <div className="ml-auto" onClick={stopPropagation}>
+                <PostActionsMenu post={post} onEdit={onEditPost} onDelete={onDeletePost} />
+              </div>
+            )}
           </div>
 
-          {isReplying && (
+          {isReplying && isAuthenticated && (
             <div className="mt-3 pt-3 border-t border-border/50" onClick={stopPropagation}>
               <div className="space-y-2">
                 <textarea

@@ -1,11 +1,30 @@
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { getStoredRelays, saveStoredRelays } from '../lib/ndk';
 
+const getExpectedDefaultRelays = (): string[] => {
+  const configured = (import.meta.env.VITE_NOSTR_RELAYS ?? '')
+    .split(',')
+    .map((relay: string) => relay.trim())
+    .filter((relay: string) => relay.length > 0);
+
+  return configured
+    .map((relay: string) => {
+      if (!relay.startsWith('/')) return relay;
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${wsProtocol}//${window.location.host}${relay}`;
+    })
+    .filter((relay: string) => relay.startsWith('ws://') || relay.startsWith('wss://'));
+};
+
 describe('NDK Utils', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('should return default relays when localStorage is empty', () => {
     localStorage.getItem = () => null;
     const relays = getStoredRelays();
-    expect(relays).toEqual([]);
+    expect(relays).toEqual(getExpectedDefaultRelays());
   });
 
   it('should parse stored relays from localStorage', () => {
@@ -26,12 +45,12 @@ describe('NDK Utils', () => {
   it('should handle invalid JSON in localStorage', () => {
     localStorage.getItem = () => 'invalid-json';
     const relays = getStoredRelays();
-    expect(relays).toEqual([]);
+    expect(relays).toEqual(getExpectedDefaultRelays());
   });
 
   it('should ignore non-array values in localStorage', () => {
     localStorage.getItem = () => JSON.stringify({ relay: 'wss://relay1.com' });
     const relays = getStoredRelays();
-    expect(relays).toEqual([]);
+    expect(relays).toEqual(getExpectedDefaultRelays());
   });
 });

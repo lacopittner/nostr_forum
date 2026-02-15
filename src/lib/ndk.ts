@@ -1,25 +1,56 @@
 import NDK from "@nostr-dev-kit/ndk";
 
-// Default relay for first-time users
-const DEFAULT_RELAYS: string[] = [];
+const parseRelayList = (value?: string): string[] => {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((relay) => relay.trim())
+    .filter((relay) => relay.length > 0);
+};
+
+const resolveRelativeRelayUrl = (relay: string): string => {
+  if (typeof window === "undefined") return relay;
+  if (!relay.startsWith("/")) return relay;
+
+  const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${wsProtocol}//${window.location.host}${relay}`;
+};
+
+const isWebSocketRelayUrl = (relay: string): boolean => {
+  try {
+    const parsed = new URL(relay);
+    return parsed.protocol === "ws:" || parsed.protocol === "wss:";
+  } catch {
+    return false;
+  }
+};
+
+const getDefaultRelays = (): string[] => {
+  const configured = parseRelayList(import.meta.env.VITE_NOSTR_RELAYS);
+
+  return configured
+    .map(resolveRelativeRelayUrl)
+    .filter(isWebSocketRelayUrl);
+};
 
 // Get relays from localStorage or use defaults
 export const getStoredRelays = (): string[] => {
-  if (typeof window === "undefined") return DEFAULT_RELAYS;
+  const defaultRelays = getDefaultRelays();
+  if (typeof window === "undefined") return defaultRelays;
   const stored = localStorage.getItem("nostr_relays");
   if (stored) {
     try {
       const parsed = JSON.parse(stored);
-      if (!Array.isArray(parsed)) return DEFAULT_RELAYS;
+      if (!Array.isArray(parsed)) return defaultRelays;
 
       return parsed.filter((relay): relay is string => {
         return typeof relay === "string" && relay.trim().length > 0;
       });
     } catch {
-      return DEFAULT_RELAYS;
+      return defaultRelays;
     }
   }
-  return DEFAULT_RELAYS;
+  return defaultRelays;
 };
 
 // Save relays to localStorage

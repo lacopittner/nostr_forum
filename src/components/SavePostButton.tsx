@@ -6,9 +6,10 @@ import { useSavedPosts } from "../hooks/useSavedPosts";
 interface SavePostButtonProps {
   post: NDKEvent;
   size?: "sm" | "md";
+  disabled?: boolean;
 }
 
-export function SavePostButton({ post, size = "sm" }: SavePostButtonProps) {
+export function SavePostButton({ post, size = "sm", disabled = false }: SavePostButtonProps) {
   const { isSaved, savePost, unsavePost } = useSavedPosts();
   const [isProcessing, setIsProcessing] = useState(false);
   
@@ -17,8 +18,8 @@ export function SavePostButton({ post, size = "sm" }: SavePostButtonProps) {
 
   const handleClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    
-    if (isProcessing) return;
+
+    if (isProcessing || disabled) return;
     
     setIsProcessing(true);
     try {
@@ -35,11 +36,13 @@ export function SavePostButton({ post, size = "sm" }: SavePostButtonProps) {
   return (
     <button
       onClick={handleClick}
-      disabled={isProcessing}
+      disabled={isProcessing || disabled}
       className={`flex items-center gap-1.5 transition-all ${
-        saved 
-          ? "text-[var(--primary)]" 
-          : "text-gray-400 hover:text-[var(--primary)]"
+        disabled
+          ? "text-muted-foreground opacity-40 cursor-not-allowed"
+          : saved
+            ? "text-[var(--primary)]"
+            : "text-gray-400 hover:text-[var(--primary)]"
       } ${isProcessing ? "opacity-50" : ""}`}
       title={saved ? "Remove from saved" : "Save post"}
     >

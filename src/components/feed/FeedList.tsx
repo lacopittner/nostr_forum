@@ -10,6 +10,7 @@ import type { FeedFilter, FeedSort } from "../../hooks/useFeed";
 
 interface FeedListProps {
   posts: NDKEvent[];
+  isAuthenticated: boolean;
   profiles: Record<string, NDKProfile>;
   commentCounts: Record<string, number>;
   reactions: Record<string, number>;
@@ -42,6 +43,7 @@ const SORT_OPTIONS: FeedSort[] = ["hot", "new", "top"];
 
 export function FeedList({
   posts,
+  isAuthenticated,
   profiles,
   commentCounts,
   reactions,
@@ -181,6 +183,7 @@ export function FeedList({
             <FeedItem
               key={post.id}
               post={post}
+              isAuthenticated={isAuthenticated}
               profile={profiles[post.pubkey]}
               reactionScore={reactions[post.id] || 0}
               userVote={userVotes[post.id]}

@@ -24,3 +24,7 @@ pnpm-debug.log*
 
 # MacOS
 .DS_Store
+
+# SSL certificates
+*.pem
+*.crt

@@ -75,6 +75,7 @@ function Feed() {
 
       <FeedList
         posts={sortedPosts}
+        isAuthenticated={Boolean(user)}
         profiles={profiles}
         commentCounts={commentCounts}
         reactions={reactions}
