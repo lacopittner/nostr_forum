@@ -14,6 +14,7 @@ export const mockUseNostr = {
   },
   login: vi.fn(),
   loginWith_nsec: vi.fn(),
+  loginWithNip46: vi.fn(),
   logout: vi.fn(),
   theme: 'light' as const,
   toggleTheme: vi.fn(),

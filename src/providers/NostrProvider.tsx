@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
-import NDK, { NDKUser, NDKRelay, NDKRelayStatus, NDKNip07Signer, NDKPrivateKeySigner } from "@nostr-dev-kit/ndk";
+import NDK, { NDKUser, NDKRelay, NDKRelayStatus, NDKNip07Signer, NDKPrivateKeySigner, NDKNip46Signer } from "@nostr-dev-kit/ndk";
 import { ndk } from "../lib/ndk";
 import { logger } from "../lib/logger";
 import {
@@ -16,6 +16,7 @@ interface NostrContextType {
   user: NDKUser | undefined;
   login: () => Promise<boolean>;
   loginWith_nsec: (nsec: string, pin: string) => Promise<boolean>;
+  loginWithNip46: (connectionToken: string) => Promise<boolean>;
   unlockWithPin: (pin: string) => Promise<boolean>;
   requiresPinUnlock: boolean;
   pinUnlockError: string;
@@ -30,6 +31,7 @@ interface NostrContextType {
 const NostrContext = createContext<NostrContextType | undefined>(undefined);
 const THEME_STORAGE_KEY = "nostr-reddit-theme";
 const USER_KEYS_STORAGE_KEY = "_nostruserkeys";
+const NIP46_SIGNER_PAYLOAD_STORAGE_KEY = "nostr_nip46_signer_payload";
 const LEGACY_AUTH_METHOD_KEY = "nostr_auth_method";
 const LEGACY_SESSION_NSEC_KEY = "nostr_session_nsec";
 const LEGACY_AUTH_PUBKEY_KEY = "nostr_auth_pubkey";
@@ -97,6 +99,7 @@ type StoredUserKeys = {
   sec?: string;
   ext?: boolean;
   encrypted?: boolean;
+  nip46?: boolean;
 };
 
 function readStoredUserKeys(): StoredUserKeys | null {
@@ -120,6 +123,34 @@ function saveStoredUserKeys(keys: StoredUserKeys) {
 function clearStoredUserKeys() {
   if (typeof window === "undefined") return;
   localStorage.removeItem(USER_KEYS_STORAGE_KEY);
+}
+
+function getStoredNip46SignerPayload(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(NIP46_SIGNER_PAYLOAD_STORAGE_KEY);
+}
+
+function saveStoredNip46SignerPayload(payload: string) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(NIP46_SIGNER_PAYLOAD_STORAGE_KEY, payload);
+}
+
+function clearStoredNip46SignerPayload() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(NIP46_SIGNER_PAYLOAD_STORAGE_KEY);
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_resolve, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 }
 
 function getInitialTheme(): "light" | "dark" {
@@ -289,12 +320,20 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     sessionStorage.removeItem(LEGACY_SESSION_NSEC_KEY);
   };
 
+  const stopActiveNip46Signer = useCallback(() => {
+    const activeSigner = (ndk as any).signer;
+    if (activeSigner instanceof NDKNip46Signer) {
+      activeSigner.stop();
+    }
+  }, []);
+
   const loginWithNsecInternal = useCallback(async (nsec: string): Promise<string | null> => {
     try {
       const signer = new NDKPrivateKeySigner(nsec);
       const user = await signer.user();
       
       if (user) {
+        stopActiveNip46Signer();
         (ndk as any).signer = signer;
         await doLogin(user);
         return user.pubkey;
@@ -303,7 +342,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       logger.error("[Nostr] Login with nsec failed", error);
     }
     return null;
-  }, [doLogin]);
+  }, [doLogin, stopActiveNip46Signer]);
 
   const loginWithNip07Internal = useCallback(async (): Promise<string | null> => {
     const hasNip07 = await waitForNip07();
@@ -318,6 +357,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const user = await nip07Signer.user();
 
       if (user) {
+        stopActiveNip46Signer();
         (ndk as any).signer = nip07Signer;
         await doLogin(user);
         return user.pubkey;
@@ -327,7 +367,63 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
 
     return null;
-  }, [doLogin]);
+  }, [doLogin, stopActiveNip46Signer]);
+
+  type Nip46LoginResult = {
+    pubkey: string;
+    signerPayload: string;
+  };
+
+  const loginWithNip46TokenInternal = useCallback(async (connectionToken: string): Promise<Nip46LoginResult | null> => {
+    const trimmedToken = connectionToken.trim();
+    if (!trimmedToken) return null;
+
+    try {
+      const nip46Signer = NDKNip46Signer.bunker(ndk, trimmedToken);
+      const user = await withTimeout(
+        nip46Signer.blockUntilReady(),
+        35000,
+        "Nostr Connect authorization timed out. Confirm the request in your signer app."
+      );
+
+      const signerPayload = nip46Signer.toPayload();
+      stopActiveNip46Signer();
+      (ndk as any).signer = nip46Signer;
+      await doLogin(user);
+      return {
+        pubkey: user.pubkey,
+        signerPayload,
+      };
+    } catch (error) {
+      logger.error("[Nostr] Login with NIP-46 failed", error);
+    }
+
+    return null;
+  }, [doLogin, stopActiveNip46Signer]);
+
+  const loginWithNip46PayloadInternal = useCallback(async (payload: string): Promise<Nip46LoginResult | null> => {
+    try {
+      const nip46Signer = await NDKNip46Signer.fromPayload(payload, ndk);
+      const user = await withTimeout(
+        nip46Signer.blockUntilReady(),
+        15000,
+        "Timed out while restoring Nostr Connect session."
+      );
+
+      const signerPayload = nip46Signer.toPayload();
+      stopActiveNip46Signer();
+      (ndk as any).signer = nip46Signer;
+      await doLogin(user);
+      return {
+        pubkey: user.pubkey,
+        signerPayload,
+      };
+    } catch (error) {
+      logger.error("[Nostr] Failed to restore NIP-46 session", error);
+    }
+
+    return null;
+  }, [doLogin, stopActiveNip46Signer]);
 
   const dismissPinUnlock = useCallback(() => {
     setRequiresPinUnlock(false);
@@ -359,6 +455,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       pub: pubkey,
       encrypted: true,
     });
+    clearStoredNip46SignerPayload();
     setPinUnlockError("");
     setRequiresPinUnlock(false);
     clearLegacyAuthSession();
@@ -374,8 +471,38 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       logger.info("[Nostr] Restoring session", {
         hasStoredNsec: Boolean(storedKeys?.sec),
         hasStoredExt: Boolean(storedKeys?.ext),
+        hasStoredNip46: Boolean(storedKeys?.nip46),
+        hasStoredNip46Payload: Boolean(getStoredNip46SignerPayload()),
         hasStoredEncryptedNsec: hasEncryptedNsec(),
       });
+
+      if (storedKeys?.nip46) {
+        const signerPayload = getStoredNip46SignerPayload();
+        if (!signerPayload) {
+          logger.warn("[Nostr] Missing NIP-46 signer payload, clearing stored keys");
+          clearStoredUserKeys();
+          setUser(undefined);
+          return;
+        }
+
+        const restoredSession = await loginWithNip46PayloadInternal(signerPayload);
+        if (!isActive) return;
+
+        if (restoredSession) {
+          saveStoredNip46SignerPayload(restoredSession.signerPayload);
+          if (storedKeys.pub !== restoredSession.pubkey) {
+            saveStoredUserKeys({
+              pub: restoredSession.pubkey,
+              nip46: true,
+            });
+          }
+          return;
+        }
+
+        logger.warn("[Nostr] Failed to restore NIP-46 session, keeping stored session for next retry");
+        setUser(undefined);
+        return;
+      }
 
       if (storedKeys?.ext) {
         const hasNip07 = await waitForNip07(7000);
@@ -405,7 +532,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return;
       }
 
-      if ((storedKeys?.encrypted || (!storedKeys?.sec && !storedKeys?.ext)) && hasEncryptedNsec()) {
+      if ((storedKeys?.encrypted || (!storedKeys?.sec && !storedKeys?.ext && !storedKeys?.nip46)) && hasEncryptedNsec()) {
         setRequiresPinUnlock(true);
         setPinUnlockError("");
         setUser(undefined);
@@ -428,7 +555,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return () => {
       isActive = false;
     };
-  }, [loginWithNsecInternal, loginWithNip07Internal]);
+  }, [loginWithNsecInternal, loginWithNip07Internal, loginWithNip46PayloadInternal]);
 
   const loginWith_nsec = async (nsec: string, pin: string): Promise<boolean> => {
     try {
@@ -441,6 +568,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           pub: pubkey,
           encrypted: true,
         });
+        clearStoredNip46SignerPayload();
         setRequiresPinUnlock(false);
         clearLegacyAuthSession();
         return true;
@@ -466,6 +594,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const pubkey = await loginWithNip07Internal();
       if (pubkey) {
         clearEncryptedNsec();
+        clearStoredNip46SignerPayload();
         setRequiresPinUnlock(false);
         setPinUnlockError("");
         saveStoredUserKeys({
@@ -482,9 +611,28 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return false;
   };
 
+  const loginWithNip46 = async (connectionToken: string): Promise<boolean> => {
+    setPinUnlockError("");
+    setRequiresPinUnlock(false);
+
+    const loginResult = await loginWithNip46TokenInternal(connectionToken);
+    if (!loginResult) return false;
+
+    clearEncryptedNsec();
+    saveStoredNip46SignerPayload(loginResult.signerPayload);
+    saveStoredUserKeys({
+      pub: loginResult.pubkey,
+      nip46: true,
+    });
+    clearLegacyAuthSession();
+    return true;
+  };
+
   const logout = () => {
+    stopActiveNip46Signer();
     clearStoredUserKeys();
     clearEncryptedNsec();
+    clearStoredNip46SignerPayload();
     clearLegacyAuthSession();
     (ndk as any).signer = undefined;
     setUser(undefined);
@@ -532,6 +680,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         user,
         login,
         loginWith_nsec,
+        loginWithNip46,
         unlockWithPin,
         requiresPinUnlock,
         pinUnlockError,

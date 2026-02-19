@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Key, Wallet } from "lucide-react";
+import { X, Key, Wallet, Link2 } from "lucide-react";
 import { useNostr } from "../providers/NostrProvider";
 
 interface LoginModalProps {
@@ -8,11 +8,12 @@ interface LoginModalProps {
 }
 
 export function LoginModal({ isOpen, onClose }: LoginModalProps) {
-  const { login, loginWith_nsec } = useNostr();
-  const [activeTab, setActiveTab] = useState<"extension" | "nsec">("extension");
+  const { login, loginWith_nsec, loginWithNip46 } = useNostr();
+  const [activeTab, setActiveTab] = useState<"extension" | "nsec" | "nip46">("extension");
   const [nsec, setNsec] = useState("");
   const [pin, setPin] = useState("");
   const [pinConfirm, setPinConfirm] = useState("");
+  const [connectionToken, setConnectionToken] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -77,17 +78,48 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
     setIsLoading(false);
   };
 
+  const handleNip46Login = async () => {
+    const token = connectionToken.trim();
+    if (!token) {
+      setError("Please paste your bunker connection token.");
+      return;
+    }
+
+    if (!token.startsWith("bunker://")) {
+      setError("Invalid token format. It should start with bunker://");
+      return;
+    }
+
+    setIsLoading(true);
+    setError("");
+
+    try {
+      const success = await loginWithNip46(token);
+      if (success) {
+        onClose();
+        setConnectionToken("");
+      } else {
+        setError("Nostr Connect login failed. Approve the request in your signer app and try again.");
+      }
+    } catch {
+      setError("Nostr Connect login failed. Approve the request in your signer app and try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const resetForm = () => {
     setNsec("");
     setPin("");
     setPinConfirm("");
+    setConnectionToken("");
     setError("");
   };
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-card border rounded-xl max-w-md w-full p-6 shadow-lg">
-        <div className="flex items-center justify-between mb-6">
+      <div className="bg-card border rounded-xl max-w-md w-full p-4 sm:p-6 shadow-lg max-h-[85vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-5 sm:mb-6">
           <h2 className="text-2xl font-black">Log In</h2>
           <button
             onClick={() => {
@@ -101,31 +133,47 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-6">
+        <div className="grid grid-cols-3 gap-2 mb-5 sm:mb-6">
           <button
             onClick={() => setActiveTab("extension")}
-            className={`flex-1 py-2 px-4 rounded-lg font-bold text-sm transition-all ${
+            className={`min-w-0 py-2 px-2 sm:px-4 rounded-lg font-bold text-xs sm:text-sm transition-all ${
               activeTab === "extension"
                 ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
                 : "bg-accent/50 text-muted-foreground hover:bg-accent"
             }`}
           >
-            <div className="flex items-center justify-center gap-2">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2">
               <Wallet size={16} />
-              Extension
+              <span className="hidden sm:inline">Extension</span>
+              <span className="sm:hidden">Ext</span>
             </div>
           </button>
           <button
             onClick={() => setActiveTab("nsec")}
-            className={`flex-1 py-2 px-4 rounded-lg font-bold text-sm transition-all ${
+            className={`min-w-0 py-2 px-2 sm:px-4 rounded-lg font-bold text-xs sm:text-sm transition-all ${
               activeTab === "nsec"
                 ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
                 : "bg-accent/50 text-muted-foreground hover:bg-accent"
             }`}
           >
-            <div className="flex items-center justify-center gap-2">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2">
               <Key size={16} />
-              Private Key
+              <span className="hidden sm:inline">Private Key</span>
+              <span className="sm:hidden">nsec</span>
+            </div>
+          </button>
+          <button
+            onClick={() => setActiveTab("nip46")}
+            className={`min-w-0 py-2 px-2 sm:px-4 rounded-lg font-bold text-xs sm:text-sm transition-all ${
+              activeTab === "nip46"
+                ? "bg-[var(--primary)] text-white"
+                : "bg-accent/50 text-muted-foreground hover:bg-accent"
+            }`}
+          >
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2">
+              <Link2 size={16} />
+              <span className="hidden sm:inline">Nostr Connect</span>
+              <span className="sm:hidden">Connect</span>
             </div>
           </button>
         </div>
@@ -216,6 +264,36 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
               className="w-full py-3 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-lg font-bold hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all"
             >
               {isLoading ? "Encrypting key..." : "Log In with Private Key"}
+            </button>
+          </div>
+        )}
+
+        {/* NIP-46 Login */}
+        {activeTab === "nip46" && (
+          <div className="space-y-4">
+            <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
+              <p className="text-xs text-emerald-700">
+                Paste your <span className="font-mono">bunker://</span> token from a signer app (Amber, NostrSigner, etc.) to log in on mobile without exposing your nsec.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Connection token (bunker://...)</label>
+              <textarea
+                value={connectionToken}
+                onChange={(e) => setConnectionToken(e.target.value)}
+                placeholder="bunker://..."
+                rows={4}
+                className="w-full bg-accent/50 border-none rounded-lg px-3 py-3 text-sm focus:ring-2 focus:ring-[var(--primary)] font-mono resize-none"
+              />
+            </div>
+
+            <button
+              onClick={handleNip46Login}
+              disabled={isLoading || !connectionToken.trim()}
+              className="w-full py-3 bg-[var(--primary)] text-white rounded-lg font-bold hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all"
+            >
+              {isLoading ? "Connecting..." : "Log In with Nostr Connect"}
             </button>
           </div>
         )}
