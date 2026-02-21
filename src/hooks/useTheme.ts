@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 
 type ThemeMode = "light" | "dark" | "system";
+type PrimaryTextTone = "light" | "dark";
 
 interface ThemeColors {
   primary: string;
@@ -11,6 +12,7 @@ export interface ThemeState {
   mode: ThemeMode;
   accentColor: string;
   surfaceTheme: string;
+  primaryTextTone: PrimaryTextTone;
   colors: ThemeColors;
 }
 
@@ -46,6 +48,11 @@ export const SURFACE_THEMES = {
     description: "Soft green-tinted surfaces",
     preview: { light: "hsl(150 25% 98%)", dark: "hsl(155 20% 9%)" },
   },
+  uniq: {
+    name: "Uniq",
+    description: "High-contrast retro-futuristic geometry",
+    preview: { light: "hsl(48 86% 95%)", dark: "hsl(220 39% 9%)" },
+  },
 };
 
 type AccentColorKey = keyof typeof ACCENT_COLORS;
@@ -56,6 +63,7 @@ const LEGACY_STORAGE_KEY = "theme";
 const DEFAULT_MODE: ThemeMode = "system";
 const DEFAULT_ACCENT: AccentColorKey = "orange";
 const DEFAULT_SURFACE: SurfaceThemeKey = "default";
+const DEFAULT_PRIMARY_TEXT_TONE: PrimaryTextTone = "light";
 
 function isThemeMode(value: unknown): value is ThemeMode {
   return value === "light" || value === "dark" || value === "system";
@@ -69,22 +77,48 @@ function isSurfaceThemeKey(value: unknown): value is SurfaceThemeKey {
   return typeof value === "string" && value in SURFACE_THEMES;
 }
 
-function generateColors(accent: string): ThemeColors {
+function isPrimaryTextTone(value: unknown): value is PrimaryTextTone {
+  return value === "light" || value === "dark";
+}
+
+function getSuggestedPrimaryTextTone(accent: AccentColorKey): PrimaryTextTone {
+  if (accent === "teal" || accent === "yellow") {
+    return "dark";
+  }
+  return DEFAULT_PRIMARY_TEXT_TONE;
+}
+
+function resolvePrimaryForeground(primaryTextTone: PrimaryTextTone): string {
+  return primaryTextTone === "dark" ? "hsl(220 30% 12%)" : "hsl(0 0% 100%)";
+}
+
+function generateColors(accent: string, primaryTextTone: PrimaryTextTone): ThemeColors {
   const colorDef = ACCENT_COLORS[accent as AccentColorKey] || ACCENT_COLORS.orange;
   return {
     primary: `hsl(${colorDef.hue} 85% 50%)`,
-    primaryForeground: "white",
+    primaryForeground: resolvePrimaryForeground(primaryTextTone),
   };
 }
 
-function readStoredTheme(): { mode: ThemeMode; accentColor: AccentColorKey; surfaceTheme: SurfaceThemeKey } {
+function readStoredTheme(): {
+  mode: ThemeMode;
+  accentColor: AccentColorKey;
+  surfaceTheme: SurfaceThemeKey;
+  primaryTextTone: PrimaryTextTone;
+} {
   if (typeof window === "undefined") {
-    return { mode: DEFAULT_MODE, accentColor: DEFAULT_ACCENT, surfaceTheme: DEFAULT_SURFACE };
+    return {
+      mode: DEFAULT_MODE,
+      accentColor: DEFAULT_ACCENT,
+      surfaceTheme: DEFAULT_SURFACE,
+      primaryTextTone: getSuggestedPrimaryTextTone(DEFAULT_ACCENT),
+    };
   }
 
   let mode: ThemeMode = DEFAULT_MODE;
   let accentColor: AccentColorKey = DEFAULT_ACCENT;
   let surfaceTheme: SurfaceThemeKey = DEFAULT_SURFACE;
+  let primaryTextTone: PrimaryTextTone = getSuggestedPrimaryTextTone(DEFAULT_ACCENT);
 
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -99,7 +133,12 @@ function readStoredTheme(): { mode: ThemeMode; accentColor: AccentColorKey; surf
       if (isSurfaceThemeKey(parsed?.surfaceTheme)) {
         surfaceTheme = parsed.surfaceTheme;
       }
-      return { mode, accentColor, surfaceTheme };
+      if (isPrimaryTextTone(parsed?.primaryTextTone)) {
+        primaryTextTone = parsed.primaryTextTone;
+      } else {
+        primaryTextTone = getSuggestedPrimaryTextTone(accentColor);
+      }
+      return { mode, accentColor, surfaceTheme, primaryTextTone };
     }
   } catch {
     // Fallback to legacy storage below
@@ -110,7 +149,7 @@ function readStoredTheme(): { mode: ThemeMode; accentColor: AccentColorKey; surf
     mode = legacyMode;
   }
 
-  return { mode, accentColor, surfaceTheme };
+  return { mode, accentColor, surfaceTheme, primaryTextTone };
 }
 
 function resolveEffectiveMode(mode: ThemeMode): "light" | "dark" {
@@ -127,7 +166,8 @@ export function useTheme() {
       mode: stored.mode,
       accentColor: stored.accentColor,
       surfaceTheme: stored.surfaceTheme,
-      colors: generateColors(stored.accentColor),
+      primaryTextTone: stored.primaryTextTone,
+      colors: generateColors(stored.accentColor, stored.primaryTextTone),
     };
   });
 
@@ -148,7 +188,7 @@ export function useTheme() {
     
     root.style.setProperty("--primary-hue", hue.toString());
     root.style.setProperty("--primary", `hsl(${hue} 85% 50%)`);
-    root.style.setProperty("--primary-foreground", "white");
+    root.style.setProperty("--primary-foreground", resolvePrimaryForeground(newTheme.primaryTextTone));
     root.style.setProperty("--primary-hover", `hsl(${hue} 85% 45%)`);
     root.style.setProperty("--primary-light", `hsl(${hue} 85% 95%)`);
     root.style.setProperty("--primary-dark", `hsl(${hue} 85% 35%)`);
@@ -156,7 +196,7 @@ export function useTheme() {
     
     // Update CSS variables for accent
     root.style.setProperty("--accent", `hsl(${hue} 85% 50%)`);
-    root.style.setProperty("--accent-foreground", "white");
+    root.style.setProperty("--accent-foreground", resolvePrimaryForeground(newTheme.primaryTextTone));
   }, []);
 
   useEffect(() => {
@@ -165,6 +205,7 @@ export function useTheme() {
       mode: theme.mode,
       accentColor: theme.accentColor,
       surfaceTheme: theme.surfaceTheme,
+      primaryTextTone: theme.primaryTextTone,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     window.dispatchEvent(new CustomEvent("nostr-theme-changed", { detail: payload }));
@@ -180,7 +221,8 @@ export function useTheme() {
         if (
           prev.mode === stored.mode &&
           prev.accentColor === stored.accentColor &&
-          prev.surfaceTheme === stored.surfaceTheme
+          prev.surfaceTheme === stored.surfaceTheme &&
+          prev.primaryTextTone === stored.primaryTextTone
         ) {
           return prev;
         }
@@ -188,7 +230,8 @@ export function useTheme() {
           mode: stored.mode,
           accentColor: stored.accentColor,
           surfaceTheme: stored.surfaceTheme,
-          colors: generateColors(stored.accentColor),
+          primaryTextTone: stored.primaryTextTone,
+          colors: generateColors(stored.accentColor, stored.primaryTextTone),
         };
       });
     };
@@ -226,11 +269,16 @@ export function useTheme() {
   }, []);
 
   const setAccentColor = useCallback((accentColor: string) => {
-    setThemeState(prev => ({
-      ...prev,
-      accentColor: isAccentColorKey(accentColor) ? accentColor : DEFAULT_ACCENT,
-      colors: generateColors(accentColor),
-    }));
+    setThemeState(prev => {
+      const nextAccent = isAccentColorKey(accentColor) ? accentColor : DEFAULT_ACCENT;
+      const suggestedTextTone = getSuggestedPrimaryTextTone(nextAccent);
+      return {
+        ...prev,
+        accentColor: nextAccent,
+        primaryTextTone: suggestedTextTone,
+        colors: generateColors(nextAccent, suggestedTextTone),
+      };
+    });
   }, []);
 
   const setSurfaceTheme = useCallback((surfaceTheme: string) => {
@@ -240,15 +288,25 @@ export function useTheme() {
     }));
   }, []);
 
+  const setPrimaryTextTone = useCallback((primaryTextTone: PrimaryTextTone) => {
+    setThemeState(prev => ({
+      ...prev,
+      primaryTextTone,
+      colors: generateColors(prev.accentColor, primaryTextTone),
+    }));
+  }, []);
+
   return {
     mode: theme.mode,
     accentColor: theme.accentColor,
     surfaceTheme: theme.surfaceTheme,
+    primaryTextTone: theme.primaryTextTone,
     colors: theme.colors,
     accentColors: ACCENT_COLORS as typeof ACCENT_COLORS,
     surfaceThemes: SURFACE_THEMES as typeof SURFACE_THEMES,
     setMode,
     setAccentColor,
     setSurfaceTheme,
+    setPrimaryTextTone,
   };
 }

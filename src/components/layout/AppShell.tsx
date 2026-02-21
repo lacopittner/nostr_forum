@@ -1,7 +1,22 @@
-import React, { useState, useEffect } from "react";
-import { Home, LogIn, Menu, X, Search, User, Settings, Bell, Compass, Palette, LogOut, Users } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import {
+  BellIcon,
+  Cross2Icon,
+  EnterIcon,
+  ExitIcon,
+  GearIcon,
+  GlobeIcon,
+  GroupIcon,
+  HamburgerMenuIcon,
+  HomeIcon,
+  InfoCircledIcon,
+  MagnifyingGlassIcon,
+  MixerHorizontalIcon,
+  PersonIcon,
+  RocketIcon,
+} from "@radix-ui/react-icons";
 import { useNostr } from "../../providers/NostrProvider";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
 import { BottomNav } from "./BottomNav";
 import { LoginModal } from "../LoginModal";
@@ -26,9 +41,12 @@ interface TrendingCommunity extends Community {
   createdAt: number;
 }
 
+type IconType = React.ElementType<{ className?: string }>;
+
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, ndk, logout, unlockWithPin, requiresPinUnlock, pinUnlockError, dismissPinUnlock } = useNostr();
   const navigate = useNavigate();
+  const location = useLocation();
   useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [myCommunities, setMyCommunities] = useState<Community[]>([]);
@@ -37,7 +55,6 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
   const [showThemeModal, setShowThemeModal] = useState(false);
   const [isUnlockingPin, setIsUnlockingPin] = useState(false);
 
-  // Track scroll for sticky header effect
   useEffect(() => {
     const handleScroll = () => {
       setScrolled(window.scrollY > 10);
@@ -46,52 +63,62 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Fetch user's communities
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
+
   useEffect(() => {
     if (!user || !ndk) {
       setMyCommunities([]);
       return;
     }
 
+    let isActive = true;
+
     const sub = ndk.subscribe(
       {
         kinds: [30001],
         authors: [user.pubkey],
-        "#d": ["communities"]
+        "#d": ["communities"],
       },
       { closeOnEose: true }
     );
 
     sub.on("event", (event: NDKEvent) => {
       const communityRefs = event.tags
-        .filter(t => t[0] === "a")
-        .map(t => t[1])
-        .filter(atag => atag.startsWith("34550:"));
+        .filter((t) => t[0] === "a")
+        .map((t) => t[1])
+        .filter((atag) => atag.startsWith("34550:"));
 
-      // Fetch community details
       communityRefs.forEach(async (atag) => {
         const [, pubkey, id] = atag.split(":");
         const community = await ndk.fetchEvent({
           kinds: [34550 as any],
           authors: [pubkey],
-          "#d": [id]
+          "#d": [id],
         });
-        
-        if (community) {
-          const name = community.tags.find(t => t[0] === "name")?.[1] || "Unnamed";
-          setMyCommunities(prev => {
-            const exists = prev.some(c => c.id === id && c.pubkey === pubkey);
-            if (exists) return prev;
-            return [...prev, { id, pubkey, name }];
-          });
-        }
+
+        if (!community || !isActive) return;
+
+        const name = community.tags.find((t) => t[0] === "name")?.[1] || "Unnamed";
+        setMyCommunities((prev) => {
+          const exists = prev.some((c) => c.id === id && c.pubkey === pubkey);
+          if (exists) return prev;
+          return [...prev, { id, pubkey, name }];
+        });
       });
     });
 
     return () => {
+      isActive = false;
       sub.stop();
     };
   }, [ndk, user]);
+
+  const isActiveRoute = (path: string) => {
+    if (path === "/") return location.pathname === "/";
+    return location.pathname.startsWith(path);
+  };
 
   const handleLogout = () => {
     logout();
@@ -116,110 +143,127 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
     setShowLoginModal(true);
   };
 
+  const currentUserName = user?.profile?.name || "Anonymous";
+  const currentUserInitial = currentUserName[0]?.toUpperCase() || "U";
+
   return (
-    <div className="flex flex-col min-h-screen bg-background text-foreground">
-      {/* Top Navbar - Clean & Modern */}
-      <header className={`sticky top-0 z-50 flex items-center justify-between px-4 h-16 border-b bg-background/80 backdrop-blur-xl transition-shadow ${scrolled ? "shadow-sm" : ""}`}>
-        <div className="flex items-center gap-3">
-          {/* Hamburger menu */}
-          <button 
-            className="lg:hidden p-2 -ml-2 hover:bg-secondary rounded-xl transition-colors"
-            onClick={() => setSidebarOpen(!sidebarOpen)}
+    <div className="relative flex min-h-screen flex-col bg-background text-foreground">
+      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+        <div className="absolute -left-32 -top-40 h-[30rem] w-[30rem] rounded-full bg-[var(--primary)]/20 blur-3xl" />
+        <div className="absolute -right-20 top-24 h-[26rem] w-[26rem] rounded-full bg-cyan-500/20 blur-3xl" />
+      </div>
+
+      <header
+        className={`sticky top-0 z-50 border-b border-border/70 transition-all duration-300 ${
+          scrolled
+            ? "bg-background/90 shadow-[0_14px_36px_-26px_rgba(0,0,0,0.8)] backdrop-blur-2xl"
+            : "bg-background/75 backdrop-blur-xl"
+        }`}
+      >
+        <div className="mx-auto flex h-[4.25rem] w-full max-w-[1700px] items-center gap-2 px-3 sm:gap-3 sm:px-5">
+          <button
+            type="button"
+            className="grid h-10 w-10 place-content-center rounded-xl border border-border/60 bg-card/70 text-muted-foreground transition hover:border-[var(--primary)]/45 hover:text-[var(--primary)] lg:hidden"
+            onClick={() => setSidebarOpen((prev) => !prev)}
+            aria-label="Toggle sidebar"
           >
-            {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
+            {sidebarOpen ? <Cross2Icon className="h-5 w-5" /> : <HamburgerMenuIcon className="h-5 w-5" />}
           </button>
-          
-          {/* Logo */}
-          <div 
-            className="flex items-center gap-2.5 cursor-pointer group"
+
+          <button
+            type="button"
+            className="group flex items-center gap-2 rounded-2xl px-1 py-1 transition hover:bg-card/60"
             onClick={() => navigate("/")}
           >
-            <div className="w-9 h-9 rounded-xl bg-[var(--primary)] flex items-center justify-center text-white font-bold text-lg shadow-sm">
-              N
-            </div>
-            <span className="font-bold text-lg tracking-tight hidden sm:block">NostrReddit</span>
-          </div>
-        </div>
-        
-        {/* Search - Clean minimal style */}
-        <div className="flex-1 max-w-xl mx-4 hidden md:block">
-          <div className="relative">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground/50" size={18} />
-            <input 
-              type="text" 
-              placeholder="Search..." 
+            <span className="relative grid h-10 w-10 place-content-center overflow-hidden rounded-xl border border-[var(--primary)]/30 bg-[linear-gradient(135deg,var(--primary)_0%,hsl(var(--primary-hue)_100%_36%)_100%)] text-white shadow-[0_14px_34px_-20px_var(--primary)]">
+              <RocketIcon className="h-5 w-5" />
+            </span>
+            <span className="hidden flex-col leading-none sm:flex">
+              <span className="text-[0.95rem] font-extrabold uppercase tracking-[0.08em]">Nostr Frontier</span>
+              <span className="text-[0.62rem] font-semibold uppercase tracking-[0.2em] text-muted-foreground/90">
+                Relay-native forum
+              </span>
+            </span>
+          </button>
+
+          <div className="relative hidden max-w-2xl flex-1 md:block">
+            <MagnifyingGlassIcon className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search communities, npubs, posts"
               onFocus={() => navigate("/search")}
-              className="search-input"
+              className="search-input h-11 w-full rounded-2xl border border-border/70 pl-10 pr-4"
             />
           </div>
-        </div>
 
-        {/* Right side actions */}
-        <div className="flex items-center gap-1">
-          {/* Mobile search */}
-          <button 
-            onClick={() => navigate("/search")}
-            className="md:hidden p-2.5 hover:bg-secondary rounded-xl transition-colors text-muted-foreground"
-          >
-            <Search size={20} />
-          </button>
-
-          {/* Theme picker */}
-          <button 
-            onClick={() => setShowThemeModal(true)}
-            className="p-2.5 hover:bg-secondary rounded-xl transition-colors text-muted-foreground"
-            title="Change appearance"
-          >
-            <Palette size={20} className="text-primary-custom" />
-          </button>
-
-          {/* Settings */}
-          <button 
-            onClick={() => navigate("/relays")}
-            className="hidden sm:flex p-2.5 hover:bg-secondary rounded-xl transition-colors text-muted-foreground"
-          >
-            <Settings size={20} />
-          </button>
-
-          {user ? (
-            <div className="flex items-center gap-2 ml-2">
-              {/* Notifications */}
-              <button className="relative p-2.5 hover:bg-secondary rounded-xl transition-colors text-muted-foreground">
-                <Bell size={20} />
-                <span className="absolute top-2 right-2 w-2 h-2 bg-[var(--primary)] rounded-full"></span>
-              </button>
-              
-              {/* User avatar */}
-              <button 
-                onClick={() => navigate(`/profile/${user.pubkey}`)}
-                className="flex items-center gap-2 pl-2 pr-3 py-1.5 hover:bg-secondary rounded-xl transition-colors"
-              >
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-gray-200 to-gray-300 dark:from-gray-700 dark:to-gray-600 flex items-center justify-center text-sm font-medium">
-                  {user.profile?.name?.[0]?.toUpperCase() || "U"}
-                </div>
-                <span className="hidden lg:block text-sm font-medium">
-                  {user.profile?.name || "User"}
-                </span>
-              </button>
-
-              <button
-                onClick={handleLogout}
-                className="hidden sm:flex items-center gap-2 px-3 py-2 hover:bg-secondary rounded-xl transition-colors text-muted-foreground hover:text-foreground"
-                title="Log out"
-              >
-                <LogOut size={18} />
-                <span className="hidden xl:inline text-sm font-medium">Log Out</span>
-              </button>
-            </div>
-          ) : (
-            <button 
-              onClick={() => setShowLoginModal(true)}
-              className="ml-2 btn-primary"
+          <div className="ml-auto flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => navigate("/search")}
+              className="grid h-10 w-10 place-content-center rounded-xl border border-border/60 bg-card/70 text-muted-foreground transition hover:border-[var(--primary)]/45 hover:text-[var(--primary)] md:hidden"
+              aria-label="Search"
             >
-              <LogIn size={18} />
-              <span className="hidden sm:inline">Log In</span>
+              <MagnifyingGlassIcon className="h-5 w-5" />
             </button>
-          )}
+
+            <button
+              type="button"
+              onClick={() => setShowThemeModal(true)}
+              className="grid h-10 w-10 place-content-center rounded-xl border border-border/60 bg-card/70 text-muted-foreground transition hover:border-[var(--primary)]/45 hover:text-[var(--primary)]"
+              title="Appearance"
+            >
+              <MixerHorizontalIcon className="h-5 w-5" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => navigate("/relays")}
+              className="hidden h-10 items-center gap-2 rounded-xl border border-border/60 bg-card/70 px-3 text-sm font-semibold text-muted-foreground transition hover:border-[var(--primary)]/45 hover:text-foreground sm:flex"
+            >
+              <GearIcon className="h-4 w-4" />
+              Relays
+            </button>
+
+            {user ? (
+              <div className="ml-1 flex items-center gap-1.5 sm:ml-2">
+                <button
+                  type="button"
+                  className="relative grid h-10 w-10 place-content-center rounded-xl border border-border/60 bg-card/70 text-muted-foreground transition hover:border-[var(--primary)]/45 hover:text-[var(--primary)]"
+                  aria-label="Notifications"
+                >
+                  <BellIcon className="h-5 w-5" />
+                  <span className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-[var(--primary)]" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => navigate(`/profile/${user.pubkey}`)}
+                  className="flex items-center gap-2 rounded-xl border border-border/60 bg-card/70 px-2 py-1.5 transition hover:border-[var(--primary)]/45"
+                >
+                  <span className="grid h-7 w-7 place-content-center rounded-lg bg-[linear-gradient(140deg,var(--primary)_0%,hsl(var(--primary-hue)_100%_36%)_100%)] text-xs font-bold text-white">
+                    {currentUserInitial}
+                  </span>
+                  <span className="hidden max-w-[8.5rem] truncate text-sm font-semibold lg:block">
+                    {currentUserName}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="hidden h-10 items-center gap-2 rounded-xl border border-border/60 bg-card/70 px-3 text-sm font-semibold text-muted-foreground transition hover:border-red-400/45 hover:text-red-400 md:flex"
+                >
+                  <ExitIcon className="h-4 w-4" />
+                  Log out
+                </button>
+              </div>
+            ) : (
+              <button type="button" onClick={() => setShowLoginModal(true)} className="ml-2 btn-primary h-10 px-4 text-sm">
+                <EnterIcon className="h-4 w-4" />
+                <span className="hidden sm:inline">Log in</span>
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
@@ -236,140 +280,160 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
       />
       <ThemeModal isOpen={showThemeModal} onClose={() => setShowThemeModal(false)} />
 
-      <div className="flex flex-1 w-full relative">
-        {/* Sidebar backdrop for mobile */}
+      <div className="mx-auto flex w-full max-w-[1700px] flex-1 gap-4 px-3 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] pt-4 sm:px-5 lg:pb-6">
         {sidebarOpen && (
-          <div 
-            className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm"
+          <div
+            className="fixed inset-0 top-[4.25rem] z-40 bg-black/45 backdrop-blur-sm lg:hidden"
             onClick={() => setSidebarOpen(false)}
           />
         )}
 
-        {/* Left Sidebar - Fixed width on desktop */}
-        <aside className={`
-          fixed lg:static inset-y-0 left-0 w-[272px] bg-background z-50 transform lg:translate-x-0 transition-transform duration-300 ease-in-out border-r
-          ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
-          top-14 lg:top-0 h-[calc(100vh-3.5rem)] lg:h-auto
-        `}>
-          <div className="flex flex-col h-full p-4 space-y-6 overflow-y-auto">
-            {/* Navigation */}
-            <div className="space-y-1">
-              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest px-2 mb-3">Navigation</p>
-              
-              <SidebarItem 
-                icon={<Home size={20} />} 
-                label="Home" 
-                onClick={() => { navigate("/"); setSidebarOpen(false); }} 
-              />
-              <SidebarItem 
-                icon={<Compass size={20} />} 
-                label="Explore" 
-                onClick={() => { navigate("/explore"); setSidebarOpen(false); }} 
-              />
-              <SidebarItem 
-                icon={<Search size={20} />} 
-                label="Search" 
-                onClick={() => { navigate("/search"); setSidebarOpen(false); }} 
-              />
-              <SidebarItem 
-                icon={<Users size={20} />} 
-                label="Communities" 
-                onClick={() => { navigate("/communities"); setSidebarOpen(false); }} 
-              />
-              <SidebarItem 
-                icon={<Settings size={20} />} 
-                label="Relays" 
-                onClick={() => { navigate("/relays"); setSidebarOpen(false); }} 
-              />
-              
-              {user && (
-                <>
-                  <SidebarItem 
-                    icon={<User size={20} />} 
-                    label="Profile" 
-                    onClick={() => { navigate(`/profile/${user.pubkey}`); setSidebarOpen(false); }} 
-                  />
-                  <SidebarItem
-                    icon={<LogOut size={20} />}
-                    label="Log Out"
-                    onClick={handleLogout}
-                  />
-                </>
-              )}
-            </div>
+        <aside
+          className={`fixed inset-y-0 left-0 z-50 w-[288px] -translate-x-full transform transition duration-300 lg:sticky lg:top-[5rem] lg:z-20 lg:h-[calc(100vh-6rem)] lg:w-[280px] lg:translate-x-0 ${
+            sidebarOpen ? "translate-x-0" : ""
+          }`}
+        >
+          <div className="mt-[4.25rem] h-[calc(100vh-4.25rem)] border-r border-border/60 bg-background/90 px-3 pb-4 pt-3 backdrop-blur-2xl lg:mt-0 lg:h-full lg:rounded-3xl lg:border lg:bg-card/85 lg:p-4">
+            <div className="flex h-full flex-col">
+              <div className="mb-4 rounded-2xl border border-border/70 bg-muted/40 p-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-muted-foreground">Signal Status</p>
+                <p className="mt-2 text-sm font-semibold">Connected to decentralized relays</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  Explore uncensored discussions and community-owned threads.
+                </p>
+              </div>
 
-            {/* My Communities */}
-            <div className="space-y-1 pt-6 border-t flex-1 overflow-hidden">
-              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest px-2 mb-3">My Communities</p>
-              
-              {!user ? (
-                <div className="px-2">
-                  <div className="text-xs text-muted-foreground italic bg-accent/30 p-4 rounded-lg border border-dashed text-center">
-                    Sign in to see your communities
+              <div className="space-y-1">
+                <p className="px-2 text-[10px] font-black uppercase tracking-[0.22em] text-muted-foreground">Navigation</p>
+
+                <SidebarItem icon={HomeIcon} label="Home" active={isActiveRoute("/")} onClick={() => navigate("/")} />
+                <SidebarItem
+                  icon={GlobeIcon}
+                  label="Explore"
+                  active={isActiveRoute("/explore")}
+                  onClick={() => navigate("/explore")}
+                />
+                <SidebarItem
+                  icon={MagnifyingGlassIcon}
+                  label="Search"
+                  active={isActiveRoute("/search")}
+                  onClick={() => navigate("/search")}
+                />
+                <SidebarItem
+                  icon={GroupIcon}
+                  label="Communities"
+                  active={isActiveRoute("/communities")}
+                  onClick={() => navigate("/communities")}
+                />
+                <SidebarItem
+                  icon={GearIcon}
+                  label="Relays"
+                  active={isActiveRoute("/relays")}
+                  onClick={() => navigate("/relays")}
+                />
+                <SidebarItem
+                  icon={InfoCircledIcon}
+                  label="About"
+                  active={isActiveRoute("/about")}
+                  onClick={() => navigate("/about")}
+                />
+
+                {user && (
+                  <>
+                    <SidebarItem
+                      icon={PersonIcon}
+                      label="Profile"
+                      active={isActiveRoute("/profile")}
+                      onClick={() => navigate(`/profile/${user.pubkey}`)}
+                    />
+                    <SidebarItem icon={ExitIcon} label="Log out" onClick={handleLogout} />
+                  </>
+                )}
+              </div>
+
+              <div className="mt-5 flex-1 overflow-hidden rounded-2xl border border-border/70 bg-muted/35 p-3">
+                <p className="mb-2 px-1 text-[10px] font-black uppercase tracking-[0.22em] text-muted-foreground">My Communities</p>
+
+                {!user ? (
+                  <div className="rounded-xl border border-dashed border-border/80 bg-card/70 p-3 text-xs text-muted-foreground">
+                    Sign in to sync your communities.
                   </div>
-                </div>
-              ) : myCommunities.length === 0 ? (
-                <div className="px-2">
-                  <div className="text-xs text-muted-foreground italic bg-accent/30 p-4 rounded-lg border border-dashed text-center">
-                    Join communities to see them here
+                ) : myCommunities.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border/80 bg-card/70 p-3 text-xs text-muted-foreground">
+                    No memberships yet. Join communities to pin them here.
                   </div>
-                </div>
-              ) : (
-                <div className="space-y-1 max-h-48 overflow-y-auto scrollbar-thin">
-                  {myCommunities.map((community) => (
-                    <div
-                      key={`${community.pubkey}:${community.id}`}
-                      onClick={() => {
-                        navigate(`/community/${community.pubkey}/${community.id}`);
-                        setSidebarOpen(false);
-                      }}
-                      className="flex items-center space-x-3 p-2 rounded-lg cursor-pointer hover:bg-accent transition-all group"
-                    >
-                      <div className="w-6 h-6 bg-[var(--primary)]/20 rounded-full flex items-center justify-center shrink-0">
-                        <span className="text-xs font-bold text-[var(--primary)]">{community.name[0].toUpperCase()}</span>
-                      </div>
-                      <span className="text-sm font-medium truncate group-hover:text-[var(--primary)] transition-colors">
-                        r/{community.name}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
+                ) : (
+                  <div className="no-scrollbar max-h-[15.5rem] space-y-1 overflow-y-auto pr-1">
+                    {myCommunities.map((community) => (
+                      <button
+                        key={`${community.pubkey}:${community.id}`}
+                        type="button"
+                        onClick={() => navigate(`/community/${community.pubkey}/${community.id}`)}
+                        className="group flex w-full items-center gap-2 rounded-xl border border-transparent bg-card/70 px-2 py-2 text-left transition hover:border-[var(--primary)]/35 hover:bg-card"
+                      >
+                        <span className="grid h-7 w-7 shrink-0 place-content-center rounded-lg bg-[var(--primary)]/20 text-xs font-black text-[var(--primary)]">
+                          {community.name[0]?.toUpperCase() || "#"}
+                        </span>
+                        <span className="truncate text-sm font-semibold text-foreground/85 group-hover:text-foreground">
+                          r/{community.name}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </aside>
 
-        {/* Main Content - Reddit-like max-width */}
-        <main className="flex-1 min-w-0 p-0 sm:p-4 lg:p-6 pb-20 lg:pb-6">
-          <div className="max-w-[920px] mx-auto">
+        <main className="min-w-0 flex-1">
+          <div className="mx-auto w-full max-w-[980px] space-y-4">
+            <div className="hidden items-center gap-3 rounded-2xl border border-border/70 bg-card/70 p-3 shadow-[0_20px_40px_-32px_rgba(0,0,0,0.8)] sm:flex">
+              <span className="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
+              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground">Live Relay Stream</p>
+              <p className="ml-auto text-xs font-medium text-foreground/75">Decentralized, persistent, permissionless</p>
+            </div>
             {children}
           </div>
         </main>
 
-        {/* Right Sidebar - Desktop only, fixed width 316px */}
-        <aside className="w-[316px] hidden xl:block p-6 space-y-6 flex-shrink-0">
+        <aside className="sticky top-[5rem] hidden h-[calc(100vh-6rem)] w-[324px] shrink-0 space-y-4 overflow-y-auto pr-1 xl:block">
           <TrendingCommunities />
           <NostrGuide />
         </aside>
       </div>
 
-      {/* Bottom Navigation - Mobile only */}
       <BottomNav />
     </div>
   );
 };
 
-// Helper components
-const SidebarItem: React.FC<{ icon: React.ReactNode; label: string; onClick: () => void }> = ({ 
-  icon, label, onClick 
-}) => (
-  <div 
+const SidebarItem: React.FC<{
+  icon: IconType;
+  label: string;
+  onClick: () => void;
+  active?: boolean;
+}> = ({ icon: Icon, label, onClick, active = false }) => (
+  <button
+    type="button"
     onClick={onClick}
-    className="flex items-center space-x-3 p-2 rounded-lg cursor-pointer hover:bg-accent transition-all"
+    className={`group flex w-full items-center gap-2 rounded-xl border px-2 py-2 text-left transition ${
+      active
+        ? "border-[var(--primary)]/40 bg-[var(--primary)]/15 text-foreground"
+        : "border-transparent bg-transparent text-muted-foreground hover:border-border/70 hover:bg-card/70 hover:text-foreground"
+    }`}
   >
-    {icon}
-    <span className="text-sm font-medium">{label}</span>
-  </div>
+    <span
+      className={`grid h-8 w-8 place-content-center rounded-lg border ${
+        active
+          ? "border-[var(--primary)]/40 bg-[var(--primary)]/20 text-[var(--primary)]"
+          : "border-border/70 bg-card/70 text-muted-foreground"
+      }`}
+    >
+      <Icon className="h-[18px] w-[18px]" />
+    </span>
+    <span className="text-sm font-semibold">{label}</span>
+  </button>
 );
 
 const TrendingCommunities: React.FC = () => {
@@ -519,9 +583,7 @@ const TrendingCommunities: React.FC = () => {
         setCommunities((prev) =>
           prev.map((item) => {
             if (item.pubkey !== community.pubkey || item.id !== community.id) return item;
-            const nextCount = alreadyMember
-              ? Math.max(0, item.memberCount - 1)
-              : item.memberCount + 1;
+            const nextCount = alreadyMember ? Math.max(0, item.memberCount - 1) : item.memberCount + 1;
             return { ...item, memberCount: nextCount };
           })
         );
@@ -532,51 +594,55 @@ const TrendingCommunities: React.FC = () => {
   };
 
   return (
-    <div className="bg-card border rounded-xl overflow-hidden shadow-sm">
-      <div className="h-12 bg-[var(--primary)] flex items-center px-4">
-        <h3 className="font-black text-white text-xs uppercase tracking-widest leading-none">Trending Communities</h3>
+    <div className="overflow-hidden rounded-3xl border border-border/80 bg-card/90 shadow-[0_30px_70px_-50px_rgba(0,0,0,0.75)]">
+      <div className="border-b border-border/70 bg-[linear-gradient(120deg,var(--primary)_0%,hsl(var(--primary-hue)_100%_38%)_90%)] px-4 py-3 text-[var(--primary-foreground)]">
+        <h3 className="text-[11px] font-black uppercase tracking-[0.22em]">Trending Communities</h3>
       </div>
-      <div className="p-4 space-y-4">
+      <div className="space-y-3 p-4">
         {isLoading ? (
-          <div className="text-xs text-muted-foreground">Loading communities...</div>
+          <div className="text-xs text-muted-foreground">Scanning relay activity...</div>
         ) : communities.length === 0 ? (
-          <div className="text-xs text-muted-foreground">No community activity yet.</div>
+          <div className="text-xs text-muted-foreground">No activity yet. You can lead the first wave.</div>
         ) : (
           communities.map((community, index) => {
             const key = `${community.pubkey}:${community.id}`;
             const joined = isMember(community.pubkey, community.id);
             const isJoining = joiningId === key;
-            const statsLabel = community.weeklyPosts > 0
-              ? `${community.weeklyPosts} posts / 7d`
-              : `${community.memberCount} members`;
+            const statsLabel =
+              community.weeklyPosts > 0 ? `${community.weeklyPosts} posts in 7d` : `${community.memberCount} members`;
 
             return (
               <div
                 key={key}
+                role="button"
+                tabIndex={0}
                 onClick={() => navigate(`/community/${community.pubkey}/${community.id}`)}
-                className="flex items-center justify-between group cursor-pointer"
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    navigate(`/community/${community.pubkey}/${community.id}`);
+                  }
+                }}
+                className="group flex w-full cursor-pointer items-center justify-between gap-2 rounded-2xl border border-border/70 bg-muted/35 p-3 text-left transition hover:border-[var(--primary)]/35 hover:bg-card"
               >
-                <div className="flex items-center space-x-3 min-w-0">
-                  <div className="w-9 h-9 bg-accent rounded-full border flex items-center justify-center font-bold text-xs shrink-0">
-                    {index + 1}
-                  </div>
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-sm font-bold group-hover:text-[var(--primary)] transition-colors truncate">
-                      r/{community.name}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-6 w-6 shrink-0 place-content-center rounded-md bg-[var(--primary)]/20 text-[10px] font-black text-[var(--primary)]">
+                      {index + 1}
                     </span>
-                    <span className="text-[11px] text-muted-foreground truncate">
-                      {statsLabel}
-                    </span>
+                    <span className="truncate text-sm font-bold group-hover:text-[var(--primary)]">r/{community.name}</span>
                   </div>
+                  <p className="mt-1 truncate pl-8 text-[11px] text-muted-foreground">{statsLabel}</p>
                 </div>
                 <button
-                  onClick={(event) => void handleJoinToggle(event, community)}
+                  type="button"
+                  onClick={(clickEvent) => void handleJoinToggle(clickEvent, community)}
                   disabled={isJoining}
-                  className={`px-4 py-1.5 rounded-full text-[11px] font-bold transition-all shrink-0 ${
+                  className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-bold transition ${
                     joined
-                      ? "bg-accent text-foreground hover:bg-accent/80"
-                      : "bg-foreground text-background hover:opacity-90"
-                  } ${isJoining ? "opacity-60 cursor-not-allowed" : "active:scale-95"}`}
+                      ? "border border-border/80 bg-card text-foreground hover:bg-muted"
+                      : "bg-[var(--primary)] text-[var(--primary-foreground)] hover:brightness-110"
+                  } ${isJoining ? "opacity-60" : ""}`}
                 >
                   {isJoining ? "..." : joined ? "Joined" : "Join"}
                 </button>
@@ -584,11 +650,13 @@ const TrendingCommunities: React.FC = () => {
             );
           })
         )}
+
         <button
+          type="button"
           onClick={() => navigate("/communities")}
-          className="w-full mt-2 py-2 text-xs font-bold bg-accent hover:bg-accent/80 rounded-lg transition-colors"
+          className="mt-2 w-full rounded-xl border border-border/80 bg-muted/35 py-2 text-xs font-bold uppercase tracking-[0.14em] text-foreground transition hover:border-[var(--primary)]/40 hover:bg-card"
         >
-          View All
+          View all communities
         </button>
       </div>
     </div>
@@ -596,27 +664,40 @@ const TrendingCommunities: React.FC = () => {
 };
 
 const NostrGuide: React.FC = () => (
-  <div className="bg-card border rounded-xl p-5 shadow-sm space-y-4">
-    <h3 className="font-bold text-sm">NostrReddit Guide</h3>
-    <div className="space-y-3">
-      <p className="text-xs text-muted-foreground leading-relaxed">
-        Welcome to the decentralized frontier. Here, your voice is yours, powered by Nostr.
-      </p>
-      <ul className="space-y-2">
-        <li className="flex items-start space-x-2 text-[11px] text-muted-foreground">
-          <div className="w-1 h-1 bg-[var(--primary)] rounded-full mt-1.5 shrink-0" />
-          <span>Posts are Kind 1 notes</span>
-        </li>
-        <li className="flex items-start space-x-2 text-[11px] text-muted-foreground">
-          <div className="w-1 h-1 bg-[var(--primary)] rounded-full mt-1.5 shrink-0" />
-          <span>Communities use NIP-72</span>
-        </li>
-      </ul>
+  <div className="rounded-3xl border border-border/80 bg-card/90 p-5 shadow-[0_30px_70px_-50px_rgba(0,0,0,0.75)]">
+    <p className="text-[11px] font-black uppercase tracking-[0.22em] text-muted-foreground">Nostr Guide</p>
+    <h3 className="mt-2 text-lg font-extrabold">Own your timeline</h3>
+
+    <div className="mt-3 space-y-2 text-xs text-muted-foreground">
+      <p>Posts are published as kind `1` events and sync across any relay that stores them.</p>
+      <p>Communities are NIP-72 groups, so membership and moderation remain portable.</p>
     </div>
-    <div className="pt-4 border-t flex flex-wrap gap-x-4 gap-y-2 text-[11px] text-muted-foreground font-medium">
-      <a href="#" className="hover:text-foreground transition-colors">Policy</a>
-      <a href="#" className="hover:text-foreground transition-colors">Help</a>
-      <a href="#" className="hover:text-foreground transition-colors">Contact</a>
+
+    <div className="mt-4 space-y-2 rounded-2xl border border-border/80 bg-muted/35 p-3 text-[11px]">
+      <div className="flex items-center gap-2">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+        <span>No central server lock-in</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
+        <span>Identity stays with your keypair</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="h-1.5 w-1.5 rounded-full bg-[var(--primary)]" />
+        <span>Cross-client compatible content</span>
+      </div>
+    </div>
+
+    <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-[11px] font-semibold text-muted-foreground">
+      <a href="#" className="transition hover:text-foreground">
+        Policy
+      </a>
+      <a href="#" className="transition hover:text-foreground">
+        Help
+      </a>
+      <a href="#" className="transition hover:text-foreground">
+        Contact
+      </a>
     </div>
   </div>
 );

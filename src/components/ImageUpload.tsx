@@ -298,7 +298,7 @@ export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
         <button
           onClick={handleSubmit}
           disabled={!isValid || isChecking}
-          className="flex-1 px-4 py-2 bg-[var(--primary)] text-white text-sm font-bold rounded-lg hover:bg-[var(--primary-dark)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="flex-1 px-4 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] text-sm font-bold rounded-lg hover:bg-[var(--primary-dark)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {isChecking ? "Checking..." : "Add Image"}
         </button>

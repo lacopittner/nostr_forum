@@ -771,7 +771,7 @@ export function PostDetailPage() {
         <p className="text-gray-400 mb-4">Post not found</p>
         <button
           onClick={() => navigate(-1)}
-          className="px-6 py-2 bg-[var(--primary)] text-white rounded-full font-bold hover:bg-[var(--primary-dark)]"
+          className="px-6 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-full font-bold hover:bg-[var(--primary-dark)]"
         >
           Go Back
         </button>
@@ -793,7 +793,7 @@ export function PostDetailPage() {
           <p className="text-muted-foreground mb-4">This post is hidden because the author is globally blocked.</p>
           <button
             onClick={() => void handleToggleGlobalBlock()}
-            className="px-4 py-2 bg-[var(--primary)] text-white rounded-lg font-bold hover:bg-[var(--primary-dark)]"
+            className="px-4 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-lg font-bold hover:bg-[var(--primary-dark)]"
           >
             Unblock Author
           </button>
@@ -883,7 +883,7 @@ export function PostDetailPage() {
                   <button
                     onClick={handleEditPost}
                     disabled={!editContent.trim()}
-                    className="px-4 py-2 bg-[var(--primary)] text-white text-sm font-bold rounded-lg hover:bg-[var(--primary-dark)] disabled:opacity-50"
+                    className="px-4 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] text-sm font-bold rounded-lg hover:bg-[var(--primary-dark)] disabled:opacity-50"
                   >
                     Save
                   </button>
@@ -1078,7 +1078,7 @@ export function PostDetailPage() {
                 type="button"
                 className={`flex items-center space-x-2 px-4 py-2 rounded-full font-bold text-sm transition-all ${
                   showReplyImageUpload
-                    ? "bg-[var(--primary)] text-white"
+                    ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
                     : "text-muted-foreground hover:text-foreground hover:bg-accent"
                 }`}
               >
@@ -1100,7 +1100,7 @@ export function PostDetailPage() {
             <button
               onClick={() => handleReply()}
               disabled={isPublishing || !replyContent.trim()}
-              className="flex items-center space-x-2 px-6 py-2 bg-[var(--primary)] text-white rounded-full font-bold text-sm hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all"
+              className="flex items-center space-x-2 px-6 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-full font-bold text-sm hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all"
             >
               {isPublishing ? (
                 <>
@@ -1132,7 +1132,7 @@ export function PostDetailPage() {
                       type="button"
                       className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-bold transition-all ${
                         showCommentMarkdownPreview
-                          ? "bg-[var(--primary)] text-white"
+                          ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
                           : "bg-accent/60 text-foreground hover:bg-accent"
                       }`}
                     >
@@ -1160,7 +1160,7 @@ export function PostDetailPage() {
                         title="Add image"
                         className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
                           showReplyImageUpload
-                            ? "bg-[var(--primary)] text-white"
+                            ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
                             : "bg-accent/60 hover:bg-accent text-foreground"
                         }`}
                       >
@@ -1283,7 +1283,7 @@ export function PostDetailPage() {
                   <button
                     onClick={() => handleReply()}
                     disabled={isPublishing || !replyContent.trim()}
-                    className="flex items-center space-x-2 px-5 py-2 bg-[var(--primary)] text-white rounded-full font-bold text-sm hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all"
+                    className="flex items-center space-x-2 px-5 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-full font-bold text-sm hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all"
                   >
                     {isPublishing ? (
                       <Loader2 size={16} className="animate-spin" />

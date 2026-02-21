@@ -9,6 +9,7 @@ import { RelayManagementPage } from "./pages/RelayManagementPage";
 import { CommunitiesPage } from "./pages/CommunitiesPage";
 import { CommunityDetailPage } from "./pages/CommunityDetailPage";
 import { PostDetailPage } from "./pages/PostDetailPage";
+import { AboutPage } from "./pages/AboutPage";
 import { CreatePost } from "./components/CreatePost";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ConnectionStatus } from "./components/ConnectionStatus";
@@ -122,6 +123,7 @@ function App() {
               <Route path="/post/:postId" element={<PostDetailPage />} />
               <Route path="/profile/:pubkey" element={<ProfilePage />} />
               <Route path="/search" element={<SearchPage />} />
+              <Route path="/about" element={<AboutPage />} />
               <Route path="/relays" element={<RelayManagementPage />} />
               <Route path="/communities" element={<CommunitiesPage />} />
               <Route path="/community/:pubkey/:communityId" element={<CommunityDetailPage />} />

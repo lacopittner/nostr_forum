@@ -108,10 +108,13 @@ export function FeedList({
       )}
 
       {posts.length === 0 && !isLoadingMore && (
-        <div className="relative overflow-hidden bg-gradient-to-br from-[var(--primary)] to-[var(--primary-light)] rounded-2xl p-6 sm:p-8 text-white shadow-lg">
+        <div className="relative overflow-hidden rounded-3xl border border-border/80 bg-card/85 p-6 sm:p-8 shadow-[0_28px_62px_-45px_rgba(0,0,0,0.92)]">
+          <div className="pointer-events-none absolute -left-14 top-0 h-44 w-44 rounded-full bg-[var(--primary)]/16 blur-3xl" />
+          <div className="pointer-events-none absolute -right-20 bottom-0 h-48 w-48 rounded-full bg-cyan-400/14 blur-3xl" />
           <div className="relative z-10">
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tighter mb-2">The Relay is Quiet...</h1>
-            <p className="text-white/80 text-sm sm:text-base max-w-xl leading-relaxed">
+            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">No active threads</p>
+            <h1 className="mt-2 text-3xl font-black tracking-tight text-foreground sm:text-4xl">The Relay is Quiet...</h1>
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
               No posts yet. Add relays in Relay Management and be the first to start the conversation.
             </p>
           </div>
@@ -130,7 +133,7 @@ export function FeedList({
                     onClick={handleFeedFilterClick}
                     className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${
                       feedFilter === "all"
-                        ? "bg-[var(--primary)] text-white"
+                        ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
                         : "bg-accent/50 text-gray-400 hover:bg-accent"
                     }`}
                   >
@@ -141,7 +144,7 @@ export function FeedList({
                     onClick={handleFeedFilterClick}
                     className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${
                       feedFilter === "following"
-                        ? "bg-[var(--primary)] text-white"
+                        ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
                         : "bg-accent/50 text-gray-400 hover:bg-accent"
                     }`}
                   >
@@ -161,7 +164,7 @@ export function FeedList({
                   data-sort={sort}
                   onClick={handleSortClick}
                   className={`px-4 py-1.5 rounded-full text-sm font-bold capitalize transition-all ${
-                    sortBy === sort ? "bg-[var(--primary)] text-white" : "bg-accent/50 text-gray-400 hover:bg-accent"
+                    sortBy === sort ? "bg-[var(--primary)] text-[var(--primary-foreground)]" : "bg-accent/50 text-gray-400 hover:bg-accent"
                   }`}
                 >
                   {sort}

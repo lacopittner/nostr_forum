@@ -216,7 +216,7 @@ export function CommentThread({
               <button
                 onClick={handleReplySubmit}
                 disabled={!replyContent.trim()}
-                className="px-3 py-1.5 bg-[var(--primary)] text-white rounded-full text-xs font-bold hover:bg-[var(--primary-dark)] disabled:opacity-50"
+                className="px-3 py-1.5 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-full text-xs font-bold hover:bg-[var(--primary-dark)] disabled:opacity-50"
               >
                 Reply
               </button>

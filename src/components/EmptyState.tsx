@@ -21,7 +21,7 @@ export function EmptyState({ icon: Icon, title, description, action }: EmptyStat
       {action && (
         <button
           onClick={action.onClick}
-          className="px-6 py-2 bg-[var(--primary)] text-white rounded-full font-bold text-sm hover:bg-[var(--primary-dark)] transition-all"
+          className="px-6 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-full font-bold text-sm hover:bg-[var(--primary-dark)] transition-all"
         >
           {action.label}
         </button>

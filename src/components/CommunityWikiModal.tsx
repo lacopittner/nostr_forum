@@ -102,7 +102,7 @@ export function CommunityWikiModal({ community, communityId, isOwner, isModerato
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all ${
                   isEditing
                     ? "bg-gray-600 text-white hover:bg-gray-700"
-                    : "bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)]"
+                    : "bg-[var(--primary)] text-[var(--primary-foreground)] hover:bg-[var(--primary-dark)]"
                 }`}
               >
                 {isEditing ? (
@@ -154,7 +154,7 @@ export function CommunityWikiModal({ community, communityId, isOwner, isModerato
               <button
                 onClick={handleSave}
                 disabled={isSaving}
-                className="flex items-center gap-2 px-4 py-2 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-dark)] transition-all disabled:opacity-50 font-bold"
+                className="flex items-center gap-2 px-4 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-lg hover:bg-[var(--primary-dark)] transition-all disabled:opacity-50 font-bold"
               >
                 <Save size={16} />
                 {isSaving ? "Saving..." : "Save Wiki"}
@@ -170,7 +170,7 @@ export function CommunityWikiModal({ community, communityId, isOwner, isModerato
             {canEdit && (
               <button
                 onClick={() => setIsEditing(true)}
-                className="mt-4 px-6 py-2 bg-[var(--primary)] text-white rounded-full font-bold hover:bg-[var(--primary-dark)] transition-all"
+                className="mt-4 px-6 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-full font-bold hover:bg-[var(--primary-dark)] transition-all"
               >
                 Create Wiki
               </button>

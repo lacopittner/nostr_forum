@@ -1,7 +1,17 @@
-import React, { useState, useEffect } from "react";
-import { Home, Search, Users, User, Plus } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import {
+  GroupIcon,
+  HomeIcon,
+  InfoCircledIcon,
+  MagnifyingGlassIcon,
+  PersonIcon,
+  PlusIcon,
+  RocketIcon,
+} from "@radix-ui/react-icons";
 import { useNostr } from "../../providers/NostrProvider";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+
+type IconType = React.ElementType<{ className?: string }>;
 
 export const BottomNav: React.FC = () => {
   const { user } = useNostr();
@@ -15,98 +25,99 @@ export const BottomNav: React.FC = () => {
     return false;
   };
 
-  const navItems = [
-    { icon: Home, label: "Home", path: "/" },
-    { icon: Search, label: "Search", path: "/search" },
+  const navItems: Array<{ icon: IconType | null; label: string; path: string | null; isAction?: boolean }> = [
+    { icon: HomeIcon, label: "Home", path: "/" },
+    { icon: MagnifyingGlassIcon, label: "Search", path: "/search" },
     { icon: null, label: "Create", path: null, isAction: true },
-    { icon: Users, label: "Communities", path: "/communities" },
-    { icon: User, label: "Profile", path: user ? `/profile/${user.pubkey}` : "/" },
+    { icon: GroupIcon, label: "Groups", path: "/communities" },
+    { icon: InfoCircledIcon, label: "About", path: "/about" },
+    { icon: PersonIcon, label: "Profile", path: user ? `/profile/${user.pubkey}` : "/" },
   ];
 
   const handleNav = (path: string | null, isAction?: boolean) => {
     if (isAction) {
-      setShowCreateMenu(!showCreateMenu);
+      setShowCreateMenu((prev) => !prev);
       return;
     }
     if (path) navigate(path);
   };
 
-  // Close menu on route change
   useEffect(() => {
     setShowCreateMenu(false);
   }, [location.pathname]);
 
   return (
     <>
-      {/* Create Menu Overlay */}
       {showCreateMenu && (
-        <div 
-          className="fixed inset-0 bg-black/50 z-40 md:hidden"
-          onClick={() => setShowCreateMenu(false)}
-        >
-          <div 
-            className="absolute bottom-20 left-4 right-4 bg-card border rounded-2xl p-4 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
+        <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm md:hidden" onClick={() => setShowCreateMenu(false)}>
+          <div
+            className="absolute left-3 right-3 rounded-3xl border border-border/70 bg-card/95 p-4 shadow-[0_32px_60px_-30px_rgba(0,0,0,0.9)]"
+            style={{ bottom: "calc(env(safe-area-inset-bottom) + 5.5rem)" }}
+            onClick={(event) => event.stopPropagation()}
           >
-            <h3 className="text-sm font-bold text-muted-foreground mb-3 px-2">Create</h3>
+            <p className="px-1 text-[10px] font-black uppercase tracking-[0.22em] text-muted-foreground">Create</p>
+
             <button
+              type="button"
               onClick={() => {
                 navigate("/communities");
                 setShowCreateMenu(false);
               }}
-              className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-accent transition-colors text-left"
+              className="mt-3 flex w-full items-center gap-3 rounded-2xl border border-border/70 bg-muted/35 p-3 text-left transition hover:border-[var(--primary)]/35 hover:bg-card"
             >
-              <div className="w-10 h-10 bg-[var(--primary)] rounded-full flex items-center justify-center">
-                <Users size={20} className="text-white" />
-              </div>
-              <div>
-                <p className="font-bold">New Community</p>
-                <p className="text-xs text-muted-foreground">Create a subreddit-like community</p>
-              </div>
+              <span className="grid h-11 w-11 place-content-center rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)]">
+                <GroupIcon className="h-5 w-5" />
+              </span>
+              <span>
+                <span className="block text-sm font-bold">New Community</span>
+                <span className="block text-xs text-muted-foreground">Start a relay-native hub for your topic.</span>
+              </span>
             </button>
+
             <button
+              type="button"
               onClick={() => {
                 navigate("/");
                 setShowCreateMenu(false);
-                // Focus the create post textarea after navigation
                 setTimeout(() => {
                   const textarea = document.querySelector('textarea[placeholder*="mind"]') as HTMLTextAreaElement;
                   textarea?.focus();
-                }, 100);
+                }, 120);
               }}
-              className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-accent transition-colors text-left mt-2"
+              className="mt-2 flex w-full items-center gap-3 rounded-2xl border border-border/70 bg-muted/35 p-3 text-left transition hover:border-cyan-400/35 hover:bg-card"
             >
-              <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
-                <Plus size={20} className="text-white" />
-              </div>
-              <div>
-                <p className="font-bold">New Post</p>
-                <p className="text-xs text-muted-foreground">Share something with the world</p>
-              </div>
+              <span className="grid h-11 w-11 place-content-center rounded-xl bg-cyan-500 text-white">
+                <RocketIcon className="h-5 w-5" />
+              </span>
+              <span>
+                <span className="block text-sm font-bold">New Post</span>
+                <span className="block text-xs text-muted-foreground">Broadcast your next idea to the network.</span>
+              </span>
             </button>
           </div>
         </div>
       )}
 
-      {/* Bottom Navigation Bar */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-background border-t z-50 md:hidden safe-area-pb">
-        <div className="flex items-center justify-around h-16">
+      <nav className="fixed inset-x-0 z-50 px-3 md:hidden" style={{ bottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
+        <div className="mx-auto flex h-16 w-full max-w-md items-center rounded-3xl border border-border/70 bg-card/95 px-1.5 shadow-[0_30px_55px_-32px_rgba(0,0,0,0.95)] backdrop-blur-xl">
           {navItems.map((item, index) => {
-            const Icon = item.icon;
             const active = item.path ? isActive(item.path) : false;
+            const Icon = item.icon;
 
             if (item.isAction) {
               return (
                 <button
                   key={index}
+                  type="button"
                   onClick={() => handleNav(null, true)}
-                  className={`flex items-center justify-center w-12 h-12 rounded-full transition-all ${
-                    showCreateMenu 
-                      ? "bg-[var(--primary)] text-white rotate-45" 
-                      : "bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)]"
+                  className={`mx-1 grid h-12 w-12 place-content-center rounded-2xl text-white transition ${
+                    showCreateMenu
+                      ? "rotate-45 bg-[var(--primary)] shadow-[0_16px_26px_-18px_var(--primary)]"
+                      : "bg-[linear-gradient(135deg,var(--primary)_0%,hsl(var(--primary-hue)_100%_38%)_100%)] shadow-[0_16px_26px_-18px_var(--primary)]"
                   }`}
+                  aria-label="Create"
                 >
-                  <Plus size={24} />
+                  <PlusIcon className="h-6 w-6" />
                 </button>
               );
             }
@@ -114,15 +125,16 @@ export const BottomNav: React.FC = () => {
             return (
               <button
                 key={index}
+                type="button"
                 onClick={() => handleNav(item.path)}
-                className={`flex flex-col items-center justify-center flex-1 h-full transition-colors ${
-                  active 
-                    ? "text-[var(--primary)]" 
-                    : "text-muted-foreground hover:text-foreground"
+                className={`flex h-full flex-1 flex-col items-center justify-center rounded-2xl transition ${
+                  active ? "text-[var(--primary)]" : "text-muted-foreground"
                 }`}
               >
-                {Icon && <Icon size={22} strokeWidth={active ? 2.5 : 2} />}
-                <span className="text-[10px] mt-0.5 font-medium">{item.label}</span>
+                {Icon && <Icon className={`h-5 w-5 ${active ? "scale-110" : ""}`} />}
+                <span className={`mt-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${active ? "text-foreground" : ""}`}>
+                  {item.label}
+                </span>
               </button>
             );
           })}

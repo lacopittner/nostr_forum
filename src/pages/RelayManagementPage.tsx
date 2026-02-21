@@ -203,7 +203,7 @@ export function RelayManagementPage() {
           <button
             onClick={handleAddRelay}
             disabled={!newRelayUrl.trim()}
-            className="px-4 py-2 bg-[var(--primary)] text-white rounded-lg font-bold text-sm hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all flex items-center gap-2"
+            className="px-4 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-lg font-bold text-sm hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all flex items-center gap-2"
           >
             <Plus size={16} />
             Add
@@ -298,7 +298,7 @@ export function RelayManagementPage() {
         
         <button
           onClick={addDefaultRelays}
-          className="px-4 py-2 bg-[var(--primary)] text-white rounded-lg font-bold text-sm hover:bg-[var(--primary-dark)] transition-all"
+          className="px-4 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-lg font-bold text-sm hover:bg-[var(--primary-dark)] transition-all"
         >
           Add Default Relays
         </button>

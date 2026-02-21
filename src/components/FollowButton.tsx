@@ -64,7 +64,7 @@ export function FollowButton({
   const variantClasses = following
     ? "bg-muted text-muted-foreground hover:bg-accent"
     : variant === "primary"
-    ? "bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)]"
+    ? "bg-[var(--primary)] text-[var(--primary-foreground)] hover:bg-[var(--primary-dark)]"
     : "bg-accent text-foreground hover:bg-accent/80";
 
   return (

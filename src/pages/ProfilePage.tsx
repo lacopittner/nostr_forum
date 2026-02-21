@@ -939,7 +939,7 @@ export function ProfilePage() {
               <button
                 onClick={handleSaveProfile}
                 disabled={isSavingProfile}
-                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[var(--primary)] text-white rounded-lg font-bold hover:bg-[var(--primary-dark)] transition-colors disabled:opacity-50"
+                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-lg font-bold hover:bg-[var(--primary-dark)] transition-colors disabled:opacity-50"
               >
                 {isSavingProfile ? <Loader2 size={16} className="animate-spin" /> : null}
                 {isSavingProfile ? "Saving..." : "Save profile"}

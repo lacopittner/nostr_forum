@@ -77,7 +77,7 @@ export function EditCommunityModal({ community, exit }: EditCommunityModalProps)
           <p className="text-gray-400 mb-4">Only the community owner can edit community settings.</p>
           <button
             onClick={exit}
-            className="w-full px-4 py-2 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-dark)] transition-all"
+            className="w-full px-4 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-lg hover:bg-[var(--primary-dark)] transition-all"
           >
             Close
           </button>
@@ -185,7 +185,7 @@ export function EditCommunityModal({ community, exit }: EditCommunityModalProps)
           <button
             onClick={handleUpdateCommunity}
             disabled={isPublishing || !name.trim()}
-            className="flex-1 px-4 py-2 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-dark)] transition-all disabled:opacity-50 font-bold"
+            className="flex-1 px-4 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-lg hover:bg-[var(--primary-dark)] transition-all disabled:opacity-50 font-bold"
           >
             {isPublishing ? "Updating..." : "Update Community"}
           </button>

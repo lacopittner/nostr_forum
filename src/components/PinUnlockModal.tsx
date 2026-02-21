@@ -69,7 +69,7 @@ export function PinUnlockModal({ isOpen, onClose, onUnlock, error, isLoading = f
         <button
           onClick={handleSubmit}
           disabled={pin.length < 4 || isLoading}
-          className="w-full py-3 bg-[var(--primary)] text-white rounded-lg font-bold hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all"
+          className="w-full py-3 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-lg font-bold hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all"
         >
           {isLoading ? "Unlocking..." : "Unlock"}
         </button>

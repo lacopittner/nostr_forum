@@ -168,7 +168,7 @@ export function ManageBlockedUsersModal({ community, exit }: ManageBlockedUsersM
           <p className="text-gray-400 mb-4">Only moderators can manage blocked users.</p>
           <button
             onClick={exit}
-            className="w-full px-4 py-2 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-dark)] transition-all"
+            className="w-full px-4 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-lg hover:bg-[var(--primary-dark)] transition-all"
           >
             Close
           </button>

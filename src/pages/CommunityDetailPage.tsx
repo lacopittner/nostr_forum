@@ -562,7 +562,7 @@ export function CommunityDetailPage() {
         <p className="text-gray-400 mb-4">Community not found</p>
         <button
           onClick={() => navigate("/communities")}
-          className="px-6 py-2 bg-[var(--primary)] text-white rounded-full font-bold hover:bg-[var(--primary-dark)]"
+          className="px-6 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-full font-bold hover:bg-[var(--primary-dark)]"
         >
           Back to Communities
         </button>
@@ -641,7 +641,7 @@ export function CommunityDetailPage() {
                   <>
                     <button
                       onClick={() => setShowEditModal(true)}
-                      className="flex items-center space-x-2 px-4 py-2 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-dark)] transition-all"
+                      className="flex items-center space-x-2 px-4 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-lg hover:bg-[var(--primary-dark)] transition-all"
                     >
                       <Edit2 size={16} />
                       <span>Edit</span>
@@ -675,7 +675,7 @@ export function CommunityDetailPage() {
                     className={`flex items-center space-x-2 px-6 py-2 rounded-lg font-bold transition-all ${
                       hasJoined
                         ? "bg-accent text-foreground hover:bg-accent/70"
-                        : "bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)]"
+                        : "bg-[var(--primary)] text-[var(--primary-foreground)] hover:bg-[var(--primary-dark)]"
                     } ${isJoining ? "opacity-50" : ""}`}
                   >
                     {isJoining ? (
@@ -737,7 +737,7 @@ export function CommunityDetailPage() {
               {user && !isCurrentUserBlocked() && community && (
                 <button
                   onClick={() => setShowCreatePostForm((prev) => !prev)}
-                  className="shrink-0 flex items-center gap-2 px-4 py-2 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-dark)] transition-all text-sm font-bold"
+                  className="shrink-0 flex items-center gap-2 px-4 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-lg hover:bg-[var(--primary-dark)] transition-all text-sm font-bold"
                 >
                   <span>✍️</span>
                   <span>Create post</span>

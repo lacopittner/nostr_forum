@@ -286,7 +286,7 @@ export function SearchPage() {
           />
           <button
             onClick={() => void handleSearch()}
-            className="absolute right-2 top-1.5 px-3 py-1.5 bg-[var(--primary)] text-white rounded-md text-xs font-bold hover:bg-[var(--primary-dark)]"
+            className="absolute right-2 top-1.5 px-3 py-1.5 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-md text-xs font-bold hover:bg-[var(--primary-dark)]"
           >
             Search
           </button>
@@ -299,7 +299,7 @@ export function SearchPage() {
               onClick={() => setScope(type)}
               className={`px-4 py-2 rounded-full text-sm font-bold transition-all ${
                 scope === type
-                  ? "bg-[var(--primary)] text-white"
+                  ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
                   : "bg-accent text-foreground hover:bg-accent/80"
               }`}
             >

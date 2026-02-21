@@ -247,7 +247,7 @@ export function FeedItem({
                   <button
                     onClick={handleSubmitReply}
                     disabled={!replyContent.trim() || isReplyPublishing}
-                    className="flex items-center gap-2 px-4 py-1.5 bg-[var(--primary)] text-white rounded-full text-xs font-bold hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-colors"
+                    className="flex items-center gap-2 px-4 py-1.5 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-full text-xs font-bold hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-colors"
                   >
                     {isReplyPublishing ? (
                       <>

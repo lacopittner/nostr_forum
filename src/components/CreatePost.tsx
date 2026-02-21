@@ -490,7 +490,7 @@ export function CreatePost({ community, communities, onPostCreated }: CreatePost
             type="button"
             className={`flex items-center space-x-2 px-4 py-2 rounded-full font-bold text-sm transition-all ${
               showImageUpload
-                ? "bg-[var(--primary)] text-white"
+                ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
                 : "text-muted-foreground hover:text-foreground hover:bg-accent"
             }`}
           >
@@ -523,7 +523,7 @@ export function CreatePost({ community, communities, onPostCreated }: CreatePost
             isPublishing ||
             !canPublish
           }
-          className="flex items-center space-x-2 px-6 py-2 bg-[var(--primary)] text-white rounded-full font-bold text-sm hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all"
+          className="flex items-center space-x-2 px-6 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-full font-bold text-sm hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all"
         >
           {isPublishing ? (
             <Loader2 size={16} className="animate-spin" />
@@ -550,7 +550,7 @@ export function CreatePost({ community, communities, onPostCreated }: CreatePost
                   type="button"
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-bold transition-all ${
                     showMarkdownPreview
-                      ? "bg-[var(--primary)] text-white"
+                      ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
                       : "bg-accent/60 text-foreground hover:bg-accent"
                   }`}
                 >
@@ -578,7 +578,7 @@ export function CreatePost({ community, communities, onPostCreated }: CreatePost
                     title="Add image"
                     className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
                       showImageUpload
-                        ? "bg-[var(--primary)] text-white"
+                        ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
                         : "bg-accent/60 hover:bg-accent text-foreground"
                     }`}
                   >
@@ -701,7 +701,7 @@ export function CreatePost({ community, communities, onPostCreated }: CreatePost
               <button
                 onClick={handlePublish}
                 disabled={isPublishing || !canPublish}
-                className="flex items-center space-x-2 px-5 py-2 bg-[var(--primary)] text-white rounded-full font-bold text-sm hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all"
+                className="flex items-center space-x-2 px-5 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-full font-bold text-sm hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all"
               >
                 {isPublishing ? (
                   <Loader2 size={16} className="animate-spin" />

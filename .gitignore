@@ -28,3 +28,6 @@ pnpm-debug.log*
 # SSL certificates
 *.pem
 *.crt
+
+# Skills
+*skills

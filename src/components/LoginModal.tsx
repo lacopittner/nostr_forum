@@ -106,7 +106,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
             onClick={() => setActiveTab("extension")}
             className={`flex-1 py-2 px-4 rounded-lg font-bold text-sm transition-all ${
               activeTab === "extension"
-                ? "bg-[var(--primary)] text-white"
+                ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
                 : "bg-accent/50 text-muted-foreground hover:bg-accent"
             }`}
           >
@@ -119,7 +119,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
             onClick={() => setActiveTab("nsec")}
             className={`flex-1 py-2 px-4 rounded-lg font-bold text-sm transition-all ${
               activeTab === "nsec"
-                ? "bg-[var(--primary)] text-white"
+                ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
                 : "bg-accent/50 text-muted-foreground hover:bg-accent"
             }`}
           >
@@ -146,7 +146,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
             <button
               onClick={handleExtensionLogin}
               disabled={isLoading}
-              className="w-full py-3 bg-[var(--primary)] text-white rounded-lg font-bold hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+              className="w-full py-3 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-lg font-bold hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
             >
               {isLoading ? "Connecting..." : "Connect with Extension"}
             </button>
@@ -213,7 +213,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
             <button
               onClick={handleNsecLogin}
               disabled={isLoading || !nsec.trim() || pin.length < 4 || pinConfirm.length < 4}
-              className="w-full py-3 bg-[var(--primary)] text-white rounded-lg font-bold hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all"
+              className="w-full py-3 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-lg font-bold hover:bg-[var(--primary-dark)] disabled:opacity-50 transition-all"
             >
               {isLoading ? "Encrypting key..." : "Log In with Private Key"}
             </button>

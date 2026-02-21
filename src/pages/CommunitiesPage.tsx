@@ -145,7 +145,7 @@ export function CommunitiesPage() {
               </button>
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="flex items-center space-x-2 px-6 py-2 bg-[var(--primary)] text-white rounded-full font-bold text-sm hover:bg-[var(--primary-dark)] transition-all"
+                className="flex items-center space-x-2 px-6 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-full font-bold text-sm hover:bg-[var(--primary-dark)] transition-all"
               >
                 <Plus size={16} />
                 <span>New Community</span>
@@ -183,7 +183,7 @@ export function CommunitiesPage() {
           {!searchQuery && user && (
             <button
               onClick={() => setShowCreateModal(true)}
-              className="px-6 py-2 bg-[var(--primary)] text-white rounded-full font-bold hover:bg-[var(--primary-dark)] transition-all"
+              className="px-6 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-full font-bold hover:bg-[var(--primary-dark)] transition-all"
             >
               Create First Community
             </button>
@@ -240,7 +240,7 @@ export function CommunitiesPage() {
                         className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold transition-all ${
                           isJoined
                             ? "bg-accent text-foreground hover:bg-accent/70"
-                            : "bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)]"
+                            : "bg-[var(--primary)] text-[var(--primary-foreground)] hover:bg-[var(--primary-dark)]"
                         } ${isJoining ? "opacity-50" : ""}`}
                       >
                         {isJoining ? (

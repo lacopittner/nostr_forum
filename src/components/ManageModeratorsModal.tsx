@@ -114,7 +114,7 @@ export function ManageModeratorsModal({ community, exit, onUpdate }: ManageModer
           <p className="text-gray-400 mb-4">Only the community owner can manage moderators.</p>
           <button
             onClick={exit}
-            className="w-full px-4 py-2 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-dark)] transition-all"
+            className="w-full px-4 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-lg hover:bg-[var(--primary-dark)] transition-all"
           >
             Close
           </button>
@@ -214,7 +214,7 @@ export function ManageModeratorsModal({ community, exit, onUpdate }: ManageModer
           <button
             onClick={handleSave}
             disabled={isPublishing}
-            className="flex-1 px-4 py-2 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-dark)] transition-all disabled:opacity-50 font-bold"
+            className="flex-1 px-4 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-lg hover:bg-[var(--primary-dark)] transition-all disabled:opacity-50 font-bold"
           >
             {isPublishing ? "Saving..." : "Save Changes"}
           </button>

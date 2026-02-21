@@ -416,7 +416,7 @@ export function CreateCommunityModal({ exit }: CreateCommunityModalProps) {
             <button
               type="submit"
               disabled={isPublishing}
-              className="flex-1 px-4 py-2 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-dark)] transition-all disabled:opacity-50 font-bold"
+              className="flex-1 px-4 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-lg hover:bg-[var(--primary-dark)] transition-all disabled:opacity-50 font-bold"
             >
               {isPublishing ? "Creating..." : "Create Community"}
             </button>
