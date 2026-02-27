@@ -160,7 +160,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
             : "bg-background/75 backdrop-blur-xl"
         }`}
       >
-        <div className="mx-auto flex h-[4.25rem] w-full max-w-[1700px] items-center gap-2 px-3 sm:gap-3 sm:px-5">
+        <div className="flex h-[4.25rem] w-full items-center gap-2 px-3 sm:gap-3 sm:px-5">
           <button
             type="button"
             className="grid h-10 w-10 place-content-center rounded-xl border border-border/60 bg-card/70 text-muted-foreground transition hover:border-[var(--primary)]/45 hover:text-[var(--primary)] lg:hidden"
@@ -280,7 +280,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
       />
       <ThemeModal isOpen={showThemeModal} onClose={() => setShowThemeModal(false)} />
 
-      <div className="mx-auto flex w-full max-w-[1700px] flex-1 gap-4 px-3 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] pt-4 sm:px-5 lg:pb-6">
+      <div className="flex w-full flex-1 gap-4 px-3 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] pt-4 sm:px-5 lg:pb-6">
         {sidebarOpen && (
           <div
             className="fixed inset-0 top-[4.25rem] z-40 bg-black/45 backdrop-blur-sm lg:hidden"
