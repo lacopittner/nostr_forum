@@ -780,6 +780,7 @@ export function CommunityDetailPage() {
             atag: `34550:${pubkey}:${communityId}`,
             flairs: communityInfo.flairs,
           }}
+          isModerator={isModerator}
           onPostCreated={() => {
             setShowCreatePostForm(false);
             // Refresh posts after creating

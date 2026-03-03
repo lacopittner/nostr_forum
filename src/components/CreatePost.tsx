@@ -44,10 +44,11 @@ interface CreatePostProps {
     atag: string;
     flairs?: string[];
   }>;
+  isModerator?: boolean;
   onPostCreated?: () => void;
 }
 
-export function CreatePost({ community, communities, onPostCreated }: CreatePostProps) {
+export function CreatePost({ community, communities, isModerator = false, onPostCreated }: CreatePostProps) {
   const { ndk, user } = useNostr();
   const { success, error: showError } = useToast();
   const [content, setContent] = useState("");
@@ -76,7 +77,17 @@ export function CreatePost({ community, communities, onPostCreated }: CreatePost
   const selectedCommunity = isInCommunityPage
     ? community
     : communities?.find((c) => c.atag === selectedCommunityAtag);
-  const canPublish = !!user && !!content.trim() && (isInCommunityPage || !!selectedCommunityAtag);
+  // If in community page, only moderators can post
+  const canPublish = !!user && !!content.trim() && (isInCommunityPage ? isModerator : !!selectedCommunityAtag);
+
+  // Show error when not a moderator in community
+  useEffect(() => {
+    if (isInCommunityPage && user && !isModerator) {
+      setPostError("Only moderators can post in this community");
+    } else {
+      setPostError(null);
+    }
+  }, [isInCommunityPage, user, isModerator]);
 
   const availableFlairs = selectedCommunity?.flairs || [];
 
