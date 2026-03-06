@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
+import { NDKEvent, NDKFilter, NDKKind } from "@nostr-dev-kit/ndk";
 import { Search as SearchIcon, ArrowLeft, Filter, Calendar } from "lucide-react";
 import { useNostr } from "../providers/NostrProvider";
 import { useGlobalBlocks } from "../hooks/useGlobalBlocks";
@@ -63,7 +63,7 @@ const toUnixEnd = (dateStr: string): number | undefined => {
 export function SearchPage() {
   const navigate = useNavigate();
   const { ndk } = useNostr();
-  const { blockedPubkeys } = useGlobalBlocks();
+  const { blockedPubkeys, isEventMuted } = useGlobalBlocks();
 
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<SearchScope>("posts");
@@ -76,6 +76,7 @@ export function SearchPage() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [searchBackend, setSearchBackend] = useState<"relay-nip50" | "local-fallback" | "">("");
 
   const normalizedQuery = useMemo(() => query.trim().toLowerCase(), [query]);
 
@@ -107,17 +108,44 @@ export function SearchPage() {
 
       const shouldSearchPosts = scope === "posts" || scope === "hashtags";
       const shouldSearchUsers = scope === "users";
+      const userEventsPromise = shouldSearchUsers
+        ? ndk.fetchEvents({ kinds: [0], limit: 500 }, { closeOnEose: true })
+        : Promise.resolve(new Set<NDKEvent>());
 
-      const [postEventsRaw, userEventsRaw] = await Promise.all([
+      let postEventsRaw = new Set<NDKEvent>();
+      let usedNip50 = false;
+
+      if (shouldSearchPosts) {
+        const nip50Filter: NDKFilter<number> & { search?: string } = {
+          ...postFilter,
+          search: normalizedQuery,
+          limit: 200,
+        };
+
+        try {
+          const relaySearchResults = await ndk.fetchEvents(nip50Filter, { closeOnEose: true });
+          if (relaySearchResults.size > 0) {
+            postEventsRaw = relaySearchResults;
+            usedNip50 = true;
+          } else {
+            postEventsRaw = await ndk.fetchEvents(postFilter, { closeOnEose: true });
+          }
+        } catch (error) {
+          logger.warn("NIP-50 relay search failed, falling back to local index", error);
+          postEventsRaw = await ndk.fetchEvents(postFilter, { closeOnEose: true });
+        }
+      }
+
+      const userEventsRaw = await userEventsPromise;
+      setSearchBackend(
         shouldSearchPosts
-          ? ndk.fetchEvents(postFilter, { closeOnEose: true })
-          : Promise.resolve(new Set<NDKEvent>()),
-        shouldSearchUsers
-          ? ndk.fetchEvents({ kinds: [0], limit: 500 }, { closeOnEose: true })
-          : Promise.resolve(new Set<NDKEvent>()),
-      ]);
+          ? usedNip50
+            ? "relay-nip50"
+            : "local-fallback"
+          : "local-fallback"
+      );
 
-      const postEvents = Array.from(postEventsRaw).filter((event) => !blockedPubkeys.has(event.pubkey));
+      const postEvents = Array.from(postEventsRaw).filter((event) => !isEventMuted(event));
       const communityFilterLower = communityFilter.trim().toLowerCase();
 
       const indexedPosts = postEvents
@@ -253,6 +281,7 @@ export function SearchPage() {
     communityFilter,
     dateFrom,
     dateTo,
+    isEventMuted,
     ndk,
     normalizedQuery,
     scope,
@@ -360,6 +389,12 @@ export function SearchPage() {
               <option value="relevance">Relevance</option>
               <option value="newest">Newest</option>
             </select>
+          </div>
+        )}
+
+        {scope !== "users" && searchBackend && (
+          <div className="text-xs text-muted-foreground">
+            Search engine: {searchBackend === "relay-nip50" ? "Relay NIP-50" : "Local fallback"}
           </div>
         )}
       </div>
