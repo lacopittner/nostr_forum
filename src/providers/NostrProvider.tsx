@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback, useRef } from "react";
 import NDK, { NDKUser, NDKRelay, NDKRelayStatus, NDKNip07Signer, NDKPrivateKeySigner, NDKNip46Signer } from "@nostr-dev-kit/ndk";
 import { ndk } from "../lib/ndk";
 import { logger } from "../lib/logger";
@@ -189,6 +189,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [theme, setTheme] = useState<"light" | "dark">(getInitialTheme);
   const [requiresPinUnlock, setRequiresPinUnlock] = useState(false);
   const [pinUnlockError, setPinUnlockError] = useState("");
+  const reconnectAttemptsRef = useRef(0);
 
   // Keep context theme in sync with global theme manager.
   useEffect(() => {
@@ -303,6 +304,46 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       setConnectionStatus("error");
     }
   };
+
+  useEffect(() => {
+    if (connectionStatus === "connected") {
+      reconnectAttemptsRef.current = 0;
+      return;
+    }
+
+    if (connectionStatus === "connecting") return;
+
+    const nextAttempt = reconnectAttemptsRef.current + 1;
+    reconnectAttemptsRef.current = nextAttempt;
+    const backoffMs = Math.min(30000, 1500 * 2 ** (nextAttempt - 1));
+
+    logger.warn(`[Nostr] Connection degraded (${connectionStatus}), retrying in ${backoffMs}ms`);
+
+    const timeoutId = setTimeout(() => {
+      setConnectionStatus("connecting");
+      ndk.connect().catch((error) => {
+        logger.error("[Nostr] Auto reconnect attempt failed", error);
+      });
+    }, backoffMs);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [connectionStatus]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleOnline = () => {
+      logger.info("[Nostr] Browser reported network online, reconnecting relays");
+      void reconnect();
+    };
+
+    window.addEventListener("online", handleOnline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+    };
+  }, [reconnect]);
 
   const doLogin = useCallback(async (user: NDKUser) => {
     user.ndk = ndk;

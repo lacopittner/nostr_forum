@@ -1,5 +1,11 @@
 import NDK from "@nostr-dev-kit/ndk";
 
+const DEFAULT_FAILOVER_RELAYS = [
+  "wss://relay.damus.io",
+  "wss://relay.nostr.band",
+  "wss://nos.lol",
+];
+
 const parseRelayList = (value?: string): string[] => {
   if (!value) return [];
   return value
@@ -25,12 +31,25 @@ const isWebSocketRelayUrl = (relay: string): boolean => {
   }
 };
 
-const getDefaultRelays = (): string[] => {
-  const configured = parseRelayList(import.meta.env.VITE_NOSTR_RELAYS);
+const ensureWebsocketScheme = (relay: string): string => {
+  const trimmed = relay.trim();
+  if (!trimmed) return trimmed;
+  if (trimmed.startsWith("ws://") || trimmed.startsWith("wss://")) return trimmed;
+  return `wss://${trimmed}`;
+};
 
-  return configured
+const normalizeRelayList = (relays: string[]): string[] => {
+  const normalized = relays
     .map(resolveRelativeRelayUrl)
+    .map(ensureWebsocketScheme)
     .filter(isWebSocketRelayUrl);
+
+  return Array.from(new Set(normalized));
+};
+
+const getDefaultRelays = (): string[] => {
+  const configured = normalizeRelayList(parseRelayList(import.meta.env.VITE_NOSTR_RELAYS));
+  return configured.length > 0 ? configured : [...DEFAULT_FAILOVER_RELAYS];
 };
 
 // Get relays from localStorage or use defaults
@@ -43,9 +62,10 @@ export const getStoredRelays = (): string[] => {
       const parsed = JSON.parse(stored);
       if (!Array.isArray(parsed)) return defaultRelays;
 
-      return parsed.filter((relay): relay is string => {
-        return typeof relay === "string" && relay.trim().length > 0;
-      });
+      const normalizedStored = normalizeRelayList(
+        parsed.filter((relay): relay is string => typeof relay === "string")
+      );
+      return normalizedStored.length > 0 ? normalizedStored : defaultRelays;
     } catch {
       return defaultRelays;
     }
@@ -56,7 +76,11 @@ export const getStoredRelays = (): string[] => {
 // Save relays to localStorage
 export const saveStoredRelays = (relays: string[]) => {
   if (typeof window === "undefined") return;
-  localStorage.setItem("nostr_relays", JSON.stringify(relays));
+  const normalized = normalizeRelayList(relays);
+  localStorage.setItem(
+    "nostr_relays",
+    JSON.stringify(normalized.length > 0 ? normalized : getDefaultRelays())
+  );
 };
 
 class NDKService {
