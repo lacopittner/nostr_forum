@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
 import {
   Send,
@@ -24,12 +24,22 @@ import { useNostr } from "../providers/NostrProvider";
 import { useToast } from "../lib/toast";
 import { useRateLimit } from "../hooks/useRateLimit";
 import { logger } from "../lib/logger";
+import { publishWithRelayFailover } from "../lib/publish";
 import { FlairSelector } from "./FlairSelector";
 import { ImageUpload } from "./ImageUpload";
 import { MarkdownContent } from "./MarkdownContent";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
 const COMMUNITY_APPROVAL_KIND = 4550;
+const DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const DRAFT_SAVE_DEBOUNCE_MS = 1000;
+
+interface StoredPostDraft {
+  content: string;
+  selectedCommunityAtag?: string;
+  savedAt: number;
+  expiresAt: number;
+}
 
 interface PostCommunityTarget {
   pubkey: string;
@@ -63,9 +73,11 @@ export function CreatePost({ community, communities, isModerator = false, onPost
   const [isFullscreenEditorOpen, setIsFullscreenEditorOpen] = useState(false);
   const [showMarkdownPreview, setShowMarkdownPreview] = useState(false);
   const [isHeadingMenuOpen, setIsHeadingMenuOpen] = useState(false);
+  const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null);
   const inlineTextareaRef = useRef<HTMLTextAreaElement>(null);
   const fullscreenTextareaRef = useRef<HTMLTextAreaElement>(null);
   const headingMenuRef = useRef<HTMLDivElement>(null);
+  const draftRestoredRef = useRef(false);
 
   const { checkRateLimit } = useRateLimit("posting", {
     maxAttempts: 3,
@@ -96,6 +108,17 @@ export function CreatePost({ community, communities, isModerator = false, onPost
   const hasWritableCommunity = Boolean(
     communities?.some((item) => !item.isClosed || item.isModerator)
   );
+  const draftStorageKey = useMemo(
+    () => `nostr_forum:create_post_draft:${user?.pubkey || "guest"}`,
+    [user?.pubkey]
+  );
+  const draftExpiryHint = useMemo(() => {
+    if (!draftSavedAt) return null;
+    const msLeft = draftSavedAt + DRAFT_TTL_MS - Date.now();
+    if (msLeft <= 0) return "Draft expired.";
+    const daysLeft = Math.max(1, Math.ceil(msLeft / (24 * 60 * 60 * 1000)));
+    return `Draft will be deleted in ${daysLeft} day${daysLeft === 1 ? "" : "s"}.`;
+  }, [draftSavedAt]);
 
   useEffect(() => {
     if (user && selectedCommunityIsClosed && !selectedCommunityUserIsModerator) {
@@ -106,6 +129,75 @@ export function CreatePost({ community, communities, isModerator = false, onPost
   }, [user, selectedCommunityIsClosed, selectedCommunityUserIsModerator]);
 
   const availableFlairs = selectedCommunity?.flairs || [];
+
+  useEffect(() => {
+    draftRestoredRef.current = false;
+  }, [draftStorageKey]);
+
+  useEffect(() => {
+    if (draftRestoredRef.current) return;
+    if (typeof window === "undefined") return;
+
+    draftRestoredRef.current = true;
+    const rawDraft = localStorage.getItem(draftStorageKey);
+    if (!rawDraft) return;
+
+    try {
+      const parsed = JSON.parse(rawDraft) as StoredPostDraft;
+      if (!parsed || typeof parsed !== "object") return;
+
+      if (!parsed.expiresAt || parsed.expiresAt < Date.now()) {
+        localStorage.removeItem(draftStorageKey);
+        return;
+      }
+
+      if (parsed.content) {
+        setContent(parsed.content);
+      }
+
+      if (!isInCommunityPage && parsed.selectedCommunityAtag) {
+        setSelectedCommunityAtag(parsed.selectedCommunityAtag);
+      }
+
+      if (parsed.savedAt) {
+        setDraftSavedAt(parsed.savedAt);
+      }
+    } catch {
+      localStorage.removeItem(draftStorageKey);
+    }
+  }, [draftStorageKey, isInCommunityPage]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const shouldClearDraft = !content.trim() && imageUrls.length === 0;
+    if (shouldClearDraft) {
+      localStorage.removeItem(draftStorageKey);
+      setDraftSavedAt(null);
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      const now = Date.now();
+      const draft: StoredPostDraft = {
+        content,
+        selectedCommunityAtag: isInCommunityPage ? community?.atag : selectedCommunityAtag,
+        savedAt: now,
+        expiresAt: now + DRAFT_TTL_MS,
+      };
+      localStorage.setItem(draftStorageKey, JSON.stringify(draft));
+      setDraftSavedAt(now);
+    }, DRAFT_SAVE_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [
+    community?.atag,
+    content,
+    draftStorageKey,
+    imageUrls.length,
+    isInCommunityPage,
+    selectedCommunityAtag,
+  ]);
 
   useEffect(() => {
     if (!isFullscreenEditorOpen) return;
@@ -388,7 +480,7 @@ export function CreatePost({ community, communities, isModerator = false, onPost
       }
 
       event.tags = tags;
-      await event.publish();
+      await publishWithRelayFailover(event);
 
       if (selectedCommunityIsClosed && selectedCommunityUserIsModerator) {
         const approval = new NDKEvent(ndk);
@@ -400,7 +492,7 @@ export function CreatePost({ community, communities, isModerator = false, onPost
           ["p", event.pubkey],
           ["status", "approved"],
         ];
-        await approval.publish();
+        await publishWithRelayFailover(approval);
       }
 
       // Reset form
@@ -408,6 +500,10 @@ export function CreatePost({ community, communities, isModerator = false, onPost
       setSelectedFlair(null);
       setImageUrls([]);
       setShowImageUpload(false);
+      if (typeof window !== "undefined") {
+        localStorage.removeItem(draftStorageKey);
+      }
+      setDraftSavedAt(null);
 
       success("Post published successfully!");
       onPostCreated?.();
@@ -486,15 +582,51 @@ export function CreatePost({ community, communities, isModerator = false, onPost
         </div>
       )}
 
-      {/* Text area */}
-      <textarea
-        ref={inlineTextareaRef}
-        value={content}
-        onChange={(e) => setContent(e.target.value)}
-        onKeyDown={handleEditorKeyDown}
-        placeholder={placeholder}
-        className="w-full bg-accent/50 border-none rounded-lg p-3 text-sm focus:ring-1 focus:ring-[var(--primary)] min-h-[120px] resize-y overflow-auto"
-      />
+      <div className="mb-2 flex justify-end">
+        <button
+          onClick={() => setShowMarkdownPreview((prev) => !prev)}
+          type="button"
+          className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-bold transition-colors ${
+            showMarkdownPreview
+              ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
+              : "bg-accent/60 text-foreground hover:bg-accent"
+          }`}
+        >
+          {showMarkdownPreview ? <Edit2 size={12} /> : <Eye size={12} />}
+          {showMarkdownPreview ? "Write" : "Preview"}
+        </button>
+      </div>
+
+      {/* Text area / preview */}
+      {showMarkdownPreview ? (
+        <div className="w-full bg-accent/30 rounded-lg p-3 min-h-[120px] border border-border/60">
+          {content.trim() ? (
+            <MarkdownContent content={content} />
+          ) : (
+            <p className="text-sm text-muted-foreground">Nothing to preview yet.</p>
+          )}
+        </div>
+      ) : (
+        <textarea
+          ref={inlineTextareaRef}
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          onKeyDown={handleEditorKeyDown}
+          placeholder={placeholder}
+          className="w-full bg-accent/50 border-none rounded-lg p-3 text-sm focus:ring-1 focus:ring-[var(--primary)] min-h-[120px] resize-y overflow-auto"
+        />
+      )}
+
+      {(draftSavedAt || draftExpiryHint) && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+          {draftSavedAt && (
+            <span className="rounded-full bg-accent/50 px-2 py-0.5 font-semibold">
+              Draft saved
+            </span>
+          )}
+          {draftExpiryHint && <span>{draftExpiryHint}</span>}
+        </div>
+      )}
 
       {/* Image previews */}
       {imageUrls.length > 0 && (
