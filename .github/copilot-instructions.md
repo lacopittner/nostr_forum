@@ -1,188 +1,84 @@
-# GitHub Copilot Instructions for Nostr-Reddit-Clone
+# GitHub Copilot Instructions for Nostr Forum
 
-You are an expert Senior Nostr Protocol Developer and TypeScript Architect. You are assisting in building a decentralized alternative to Reddit using the Nostr protocol.
+You are assisting on a decentralized Reddit-like client built on Nostr.
+Prioritize protocol correctness, safety, and production-grade TypeScript.
 
-## 1. Project Context & Architecture
-- **Goal:** Build a threaded discussion platform (Reddit-like) where "Subreddits" are Nostr communities and "Upvotes" are reaction events.
-- **Tech Stack:**
-  - Language: TypeScript (Strict mode)
-  - Framework: React (with Vite)
-  - State Management: Zustand (global) + TanStack Query (async)
-  - Nostr Library: **NDK (@nostr-dev-kit/ndk)** (Preferred over raw nostr-tools for state/caching)
-  - UI Library: TailwindCSS + custom components (Reddit-like dense UI)
-  - Icons: Lucide React
+## 1. Current Stack (Source of Truth)
+- Language: TypeScript (strict)
+- Frontend: React 19 + React DOM 19
+- Build: Vite 7
+- Routing: react-router-dom 7
+- Forms: react-hook-form + zod
+- Nostr SDK: `@nostr-dev-kit/ndk`
+- UI: Tailwind CSS + custom components + Lucide icons
+- Testing: Vitest + Testing Library + Playwright
 
-## 2. Nostr Implementation Standards (NIPs)
-You must strictly map Reddit features to these specific Nostr Implementation Possibilities (NIPs):
+Do not introduce alternate frameworks/state stacks unless explicitly requested.
 
-| Reddit Feature | Nostr Spec | Implementation Detail |
-| :--- | :--- | :--- |
-| **Login** | **NIP-07** | Use `window.nostr` extension (Alby/nos2x). NEVER ask for private keys (nsec) directly in the UI. |
-| **Subreddit** | **NIP-72** | "Moderated Communities" (Event Kind `34550`). Use `d` tag for community identifier. |
-| **Post** | **Kind 1** | Standard Text Note. Must be tagged with `a` tag pointing to the NIP-72 Community event. |
-| **Comment** | **Kind 1** | Reply to a post. STRICTLY follow **NIP-10** for threading (use `root` and `reply` markers in `e` tags). |
-| **Upvote** | **NIP-25** | Reaction Event (Kind `7`). Content must be `+`. |
-| **Downvote** | **NIP-25** | Reaction Event (Kind `7`). Content must be `-`. |
-| **Flair/Tags** | **NIP-12** | Use `t` tags (hashtags) for topic categorization within the community. |
-| **User ID** | **NIP-19** | Always display users as `npub...` in UI, but use Hex internally. |
-| **Moderators** | **NIP-72** | Stored as `p` tags with role `"moderator"`: `["p", "<pubkey>", "", "moderator"]` |
-| **User Blocks** | **Custom** | Kind `34551` events with `a` tag referencing community. Prevents posting in community. |
+## 2. Nostr Protocol Mapping (Must Follow)
+Map features to these NIPs/kinds:
 
-## 3. Implemented Features
+| Product Capability | NIP / Kind | Required Behavior |
+| --- | --- | --- |
+| Login (extension) | NIP-07 | Use extension signer when available |
+| Login (remote signer) | NIP-46 | Support bunker/connect signer sessions |
+| Local key login | nsec + encrypted storage | Never store plaintext nsec; only encrypted with PIN |
+| Relay metadata | NIP-65 / kind `10002` | Track read/write relay preferences |
+| Community | NIP-72 / kind `34550` | Use `d` tag + community metadata tags |
+| Post | kind `1` | Include `a` tag to community when posting in community |
+| Comment threading | NIP-10 / kind `1` | Use `e` tags with `root` and `reply` markers correctly |
+| Reactions (vote) | NIP-25 / kind `7` | `+` for upvote, `-` for downvote |
+| Global mute list | NIP-51 / kind `10000` | Use tags `p`, `t`, `e` for user/tag/event mute |
+| Interest lists | NIP-51 / kind `30001` | Keep list semantics and `d` tags stable |
+| Search | NIP-50 | Use relay-side `search` when available, fallback locally |
+| HTTP auth upload | NIP-98 / kind `27235` | Sign HTTP upload auth event and send `Authorization: Nostr ...` |
+| File metadata | NIP-94 / kind `1063` | Include file info tags for media uploads |
+| Delete | kind `5` | Use proper `e` references to deleted event |
 
-### Core Features ✅
-- [x] User authentication via NIP-07 extension
-- [x] Global feed with posts (Kind 1)
-- [x] Upvote/downvote system (NIP-25)
-- [x] Basic comment replies (NIP-10)
-- [x] Community listing page
-- [x] Community detail page with posts
+Project-specific kinds in use:
+- `4550`: community approval/moderation state
+- `34551`: community-level block event
 
-### Moderation Features ✅
-- [x] Community creation with moderators (NIP-72)
-- [x] Edit community (owner only)
-- [x] Manage moderators (add/remove) - owner only
-- [x] Block users from community - moderators
-- [x] Block check before posting
-- [x] Voting on community posts
+## 3. Security Rules (Non-Negotiable)
+- Never expose or persist plaintext private keys.
+- Never ask user to paste plaintext keys unless explicitly in secure key-login flow.
+- Sanitize user-generated markdown/HTML rendering.
+- Treat relay data as untrusted: validate tags and guard parsing.
+- Prefer signing via active NDK signer; do not implement custom cryptography when NDK already handles it.
 
-### Pending Features 📝
-- [x] Threaded comment display (hierarchical) ✅ NIP-10 compliant with root/reply markers
-- [x] User profiles with post history ✅
-- [x] Advanced search ✅
-- [ ] Relay management UI
-- [ ] Image/media uploads (NIP-94)
-- [ ] Cross-posting between communities
-- [ ] Community discovery/directory
+## 4. Relay and Publish Behavior
+- Assume relays can fail or flap.
+- Prefer resilient publish flows (`publishWithRelayFailover`) where available.
+- Avoid code that assumes exactly one relay is always online.
+- Keep reconnect behavior backoff-based and non-blocking for UI.
 
-## 4. Project Structure
+## 5. UI/Domain Rules
+- Closed communities: only moderators can publish posts.
+- Mute state must be enforced consistently in feed, search, post detail, explore, and profile views.
+- Keep Reddit-like dense feed UX; avoid redesign unless requested.
+- Support light/dark theming already present in app.
 
-```
-src/
-├── components/
-│   ├── CreateCommunityModal.tsx    # Create new community
-│   ├── EditCommunityModal.tsx      # Edit community (owner)
-│   ├── ManageModeratorsModal.tsx   # Add/remove moderators
-│   ├── ManageBlockedUsersModal.tsx # Block/unblock users
-│   └── layout/
-│       └── AppShell.tsx            # Main layout with nav
-├── hooks/
-│   └── useCommunityBlocks.ts       # Track blocked users per community
-├── lib/
-│   └── ndk.ts                      # NDK singleton instance
-├── pages/
-│   ├── CommunitiesPage.tsx         # List all communities
-│   ├── CommunityDetailPage.tsx     # View community + posts + voting
-│   ├── ProfilePage.tsx             # User profile
-│   ├── RelayManagementPage.tsx     # Relay settings
-│   └── SearchPage.tsx              # Search functionality
-├── providers/
-│   └── NostrProvider.tsx           # NDK context + auth
-```
+## 6. Code Style Expectations
+- Avoid `any`; define explicit types/interfaces.
+- Prefer function components (`export function X() {}`) and hooks for side-effect/subscription logic.
+- Keep Nostr event/tag logic in hooks/libs when possible, not duplicated across pages.
+- Use existing helpers before adding new abstractions.
+- Keep changes small and cohesive; avoid broad unrelated refactors.
 
-## 5. Coding Guidelines
+## 7. Validation Before Completion
+For non-trivial changes, run:
+1. `npm run build`
+2. `npm test -- --run`
+3. `npm run lint`
 
-### TypeScript Rules
-- **Strict Typing:** NEVER use `any`. Always define interfaces or types.
-- **Nostr Types:** Use types from `@nostr-dev-kit/ndk` where possible (e.g., `NDKEvent`, `NDKUser`).
-- **Event Kind Constants:** Use `as any` for custom event kinds not in NDK enum.
+If any step fails, fix or clearly report what remains.
 
-### React & Component Architecture
-- **Functional Components:** Use standard function declarations: `export function MyComponent() {}`
-- **Hooks Pattern:**
-  - Logic involving NDK/Nostr subscriptions should be extracted into custom hooks
-  - Components should remain presentational (UI) as much as possible
+**For NIP-related features**: Use `.specify/templates/nip-compliance-checklist.md` to validate protocol correctness before implementation.
 
-### Nostr Event Patterns
-
-**Creating a Community (Kind 34550):**
-```typescript
-const event = new NDKEvent(ndk);
-event.kind = 34550;
-event.tags = [
-  ["d", communityId],           // Unique identifier
-  ["name", name],               // Display name
-  ["description", description], // Description
-  ["image", imageUrl],          // Cover image
-  ["rules", rules],             // Community rules
-  ["p", ownerPubkey, "", "moderator"], // Owner as moderator
-  ["p", modPubkey, "", "moderator"]    // Additional moderator
-];
-await event.publish();
-```
-
-**Posting to Community (Kind 1):**
-```typescript
-const event = new NDKEvent(ndk);
-event.kind = 1;
-event.content = "Post content";
-event.tags = [
-  ["a", `34550:${communityPubkey}:${communityId}`, communityPubkey, "root"],
-  ["t", "community"]
-];
-await event.publish();
-```
-
-**Voting (Kind 7 - NIP-25):**
-```typescript
-const reaction = new NDKEvent(ndk);
-reaction.kind = 7;
-reaction.content = "+"; // or "-" for downvote
-reaction.tags = [
-  ["e", postId],
-  ["p", postAuthorPubkey]
-];
-await reaction.publish();
-```
-
-**User Block (Kind 34551):**
-```typescript
-const blockEvent = new NDKEvent(ndk);
-blockEvent.kind = 34551 as any; // Custom kind
-blockEvent.content = reason || "Blocked by moderator";
-blockEvent.tags = [
-  ["a", communityId],      // Reference to community
-  ["p", blockedUserPubkey],
-  ["e", "block"]           // or "unblock"
-];
-await blockEvent.publish();
-```
-
-## 6. Security
-- **NEVER** store the user's private key in `localStorage` or state.
-- Always offload signing to the NIP-07 extension (`window.nostr`).
-- Validate events before rendering (malicious relays can send bad data).
-- Sanitize all HTML content from Kind 1 events to prevent XSS.
-
-## 7. UI/UX Philosophy
-- Interface should feel familiar to Reddit users (dense lists, voting arrows).
-- Hide cryptographic complexity unless user enters "Advanced Settings".
-- Orange (`orange-600`) is the primary brand color.
-- Dark/light mode support via Tailwind `dark:` classes.
-
-## 8. Common Patterns
-
-### Check if User is Moderator
-```typescript
-const isModerator = user && (
-  community.pubkey === user.pubkey ||
-  community.tags.some(t => t[0] === "p" && t[1] === user.pubkey && t[3] === "moderator")
-);
-```
-
-### Check if User is Blocked
-```typescript
-const { isCurrentUserBlocked } = useCommunityBlocks(community);
-if (isCurrentUserBlocked()) {
-  // Prevent posting
-}
-```
-
-### Fetch Community Posts
-```typescript
-const communityATag = `34550:${pubkey}:${communityId}`;
-const sub = ndk.subscribe({
-  kinds: [1],
-  "#a": [communityATag]
-}, { closeOnEose: false });
-```
+## 8. Repository Notes
+- Main app code lives in `src/`
+- Nostr provider/session logic: `src/providers/NostrProvider.tsx`
+- Relay config/utilities: `src/lib/ndk.ts`
+- Resilient publishing helper: `src/lib/publish.ts`
+- Feed/state hooks: `src/hooks/`
+- Copilot prompt/agent files for Spec Kit: `.github/prompts/` and `.github/agents/`
