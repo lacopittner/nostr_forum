@@ -1,67 +1,75 @@
 import { useState } from "react";
-import { X, Link2, ImageIcon, Check } from "lucide-react";
+import type { ClipboardEvent as ReactClipboardEvent } from "react";
+import { X, Link2, ImageIcon, Check, UploadCloud } from "lucide-react";
+import { NDKEvent } from "@nostr-dev-kit/ndk";
 import { useToast } from "../lib/toast";
+import { useNostr } from "../providers/NostrProvider";
 
 interface ImageUploadProps {
   onImageUploaded: (url: string) => void;
   onCancel?: () => void;
 }
 
+const NIP98_AUTH_KIND = 27235;
+
+type UploadMode = "url" | "file";
+
+const toBase64 = (value: string): string => {
+  if (typeof window !== "undefined" && typeof window.btoa === "function") {
+    return window.btoa(value);
+  }
+  throw new Error("Base64 encoding is not available in this environment");
+};
+
+const sha256Hex = async (file: File): Promise<string> => {
+  const buffer = await file.arrayBuffer();
+  const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
+  const bytes = Array.from(new Uint8Array(hashBuffer));
+  return bytes.map((byte) => byte.toString(16).padStart(2, "0")).join("");
+};
+
 export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
+  const { ndk, user } = useNostr();
+  const { error: showError } = useToast();
+
+  const [mode, setMode] = useState<UploadMode>("url");
   const [imageUrl, setImageUrl] = useState("");
   const [isValid, setIsValid] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
   const [previewFailed, setPreviewFailed] = useState(false);
-  const { error: showError } = useToast();
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  // Convert various image hosting URLs to direct image links
+  const uploadEndpoint = (import.meta.env.VITE_NIP98_UPLOAD_URL || "").trim();
+  const uploadMethod = ((import.meta.env.VITE_NIP98_UPLOAD_METHOD || "PUT").toUpperCase() === "POST"
+    ? "POST"
+    : "PUT") as "PUT" | "POST";
+
   const normalizeImageUrl = (url: string): string => {
-    console.log('[ImageUpload] Normalizing URL:', url);
     try {
       const urlObj = new URL(url);
-      console.log('[ImageUpload] Parsed URL:', { hostname: urlObj.hostname, pathname: urlObj.pathname });
-      
-      // Imgur: imgur.com/xxx -> i.imgur.com/xxx.jpg
-      if (urlObj.hostname === 'imgur.com' || urlObj.hostname === 'www.imgur.com') {
-        const imageId = urlObj.pathname.replace(/^\//, '').split('/')[0];
-        console.log('[ImageUpload] Imgur gallery detected, imageId:', imageId);
-        if (imageId) {
-          const newUrl = `https://i.imgur.com/${imageId}.jpg`;
-          console.log('[ImageUpload] Converted to:', newUrl);
-          return newUrl;
-        }
+
+      if (urlObj.hostname === "imgur.com" || urlObj.hostname === "www.imgur.com") {
+        const imageId = urlObj.pathname.replace(/^\//, "").split("/")[0];
+        if (imageId) return `https://i.imgur.com/${imageId}.jpg`;
       }
-      
-      // Imgur already direct link but missing extension
-      if (urlObj.hostname === 'i.imgur.com' && !/\.(jpg|jpeg|png|gif|webp)$/i.test(urlObj.pathname)) {
-        const newUrl = `${url}.jpg`;
-        console.log('[ImageUpload] Added extension:', newUrl);
-        return newUrl;
+
+      if (urlObj.hostname === "i.imgur.com" && !/\.(jpg|jpeg|png|gif|webp)$/i.test(urlObj.pathname)) {
+        return `${url}.jpg`;
       }
-      
-      // Gyazo: gyazo.com/xxx -> i.gyazo.com/xxx.png
-      if (urlObj.hostname === 'gyazo.com' || urlObj.hostname === 'www.gyazo.com') {
-        const imageId = urlObj.pathname.replace(/^\//, '').split('/')[0];
-        if (imageId) {
-          const newUrl = `https://i.gyazo.com/${imageId}.png`;
-          console.log('[ImageUpload] Gyazo converted:', newUrl);
-          return newUrl;
-        }
+
+      if (urlObj.hostname === "gyazo.com" || urlObj.hostname === "www.gyazo.com") {
+        const imageId = urlObj.pathname.replace(/^\//, "").split("/")[0];
+        if (imageId) return `https://i.gyazo.com/${imageId}.png`;
       }
-      
-      console.log('[ImageUpload] No conversion needed');
+
       return url;
-    } catch (e) {
-      console.log('[ImageUpload] URL parse error:', e);
+    } catch {
       return url;
     }
   };
 
-  // Validate if URL looks like an image
   const validateUrl = (url: string) => {
-    console.log('[ImageUpload] Validating URL:', url);
     const normalizedUrl = normalizeImageUrl(url);
-    console.log('[ImageUpload] Normalized URL:', normalizedUrl);
     const imageExtensions = /\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)(\?.*)?$/i;
     const imageHosts = [
       "imgur.com",
@@ -96,32 +104,124 @@ export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
 
     try {
       const urlObj = new URL(normalizedUrl);
-      console.log('[ImageUpload] Validating normalized:', { hostname: urlObj.hostname, pathname: urlObj.pathname });
       const hasImageExt = imageExtensions.test(url);
       const isImageHost = imageHosts.some((host) => urlObj.hostname.includes(host));
       const hasImageInPath = urlObj.pathname.includes("/i/") || urlObj.pathname.includes("/img/");
-      
-      const result = hasImageExt || isImageHost || hasImageInPath;
-      console.log('[ImageUpload] Validation result:', { hasImageExt, isImageHost, hasImageInPath, result });
 
-      return result;
-    } catch (e) {
-      console.log('[ImageUpload] Validation error:', e);
+      return hasImageExt || isImageHost || hasImageInPath;
+    } catch {
       return false;
     }
   };
 
   const handleUrlChange = (value: string) => {
-    console.log('[ImageUpload] URL change:', value);
     setImageUrl(value);
     setPreviewFailed(false);
-    const valid = validateUrl(value);
-    console.log('[ImageUpload] Setting isValid:', valid);
-    setIsValid(valid);
+    setIsValid(validateUrl(value));
   };
 
-  const handleSubmit = async () => {
-    console.log('[ImageUpload] Submit clicked, url:', imageUrl);
+  const createNip98AuthHeader = async (
+    method: "PUT" | "POST",
+    requestUrl: string,
+    payloadHash?: string
+  ): Promise<string> => {
+    if (!user) {
+      throw new Error("Login is required for authenticated upload");
+    }
+
+    const authEvent = new NDKEvent(ndk);
+    authEvent.kind = NIP98_AUTH_KIND as any;
+    authEvent.content = "";
+    authEvent.tags = [["u", requestUrl], ["method", method]];
+
+    if (payloadHash) {
+      authEvent.tags.push(["payload", payloadHash]);
+    }
+
+    await authEvent.sign();
+    return `Nostr ${toBase64(JSON.stringify(authEvent.rawEvent()))}`;
+  };
+
+  const extractUploadedUrl = (bodyText: string): string | null => {
+    try {
+      const json = JSON.parse(bodyText) as
+        | { url?: string; data?: { url?: string }; image?: string; file_url?: string }
+        | undefined;
+      const fromJson = json?.url || json?.data?.url || json?.image || json?.file_url;
+      if (fromJson) return fromJson;
+    } catch {
+      // Response is not JSON, continue with plain text heuristics.
+    }
+
+    const trimmed = bodyText.trim();
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    return null;
+  };
+
+  const handleFileUpload = async () => {
+    if (!selectedFile) {
+      showError("Choose an image file first.");
+      return;
+    }
+
+    if (!uploadEndpoint) {
+      showError("File upload endpoint is not configured. Set VITE_NIP98_UPLOAD_URL.");
+      return;
+    }
+
+    if (!ndk.signer || !user) {
+      showError("Please login first. NIP-98 upload requires a signer.");
+      return;
+    }
+
+    setIsChecking(true);
+
+    try {
+      const payloadHash = await sha256Hex(selectedFile);
+      const authHeader = await createNip98AuthHeader(uploadMethod, uploadEndpoint, payloadHash);
+
+      const headers: Record<string, string> = {
+        Authorization: authHeader,
+      };
+
+      let body: BodyInit;
+      if (uploadMethod === "PUT") {
+        body = selectedFile;
+        if (selectedFile.type) {
+          headers["Content-Type"] = selectedFile.type;
+        }
+      } else {
+        const formData = new FormData();
+        formData.append("file", selectedFile);
+        body = formData;
+      }
+
+      const response = await fetch(uploadEndpoint, {
+        method: uploadMethod,
+        headers,
+        body,
+      });
+
+      const bodyText = await response.text();
+      const uploadedUrl = extractUploadedUrl(bodyText);
+
+      if (!response.ok || !uploadedUrl) {
+        throw new Error(`Upload failed (${response.status})`);
+      }
+
+      onImageUploaded(normalizeImageUrl(uploadedUrl));
+    } catch (error) {
+      showError(
+        error instanceof Error
+          ? `Upload failed: ${error.message}`
+          : "Upload failed. Check your upload server and NIP-98 verification."
+      );
+    } finally {
+      setIsChecking(false);
+    }
+  };
+
+  const handleUrlSubmit = async () => {
     if (!imageUrl.trim()) {
       showError("Please enter an image URL");
       return;
@@ -129,51 +229,40 @@ export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
 
     setIsChecking(true);
 
-    // Normalize URL before validation
     const normalizedUrl = normalizeImageUrl(imageUrl);
-    console.log('[ImageUpload] Submit normalized URL:', normalizedUrl);
 
-    // Basic validation
-    const isUrlValid = validateUrl(imageUrl);
-    console.log('[ImageUpload] Submit validation:', isUrlValid);
-    if (!isUrlValid) {
-      console.log('[ImageUpload] Validation failed, showing error');
+    if (!validateUrl(imageUrl)) {
       showError("This doesn't look like a valid image URL. Please check the link.");
       setIsChecking(false);
       return;
     }
 
-    // Try to load the image to verify it exists
-    console.log('[ImageUpload] Attempting to load image:', normalizedUrl);
     try {
       await new Promise<void>((resolve, reject) => {
         const img = new Image();
-        img.onload = () => {
-          console.log('[ImageUpload] Image loaded successfully');
-          resolve();
-        };
-        img.onerror = (e) => {
-          console.log('[ImageUpload] Image failed to load:', e);
-          reject(new Error("Failed to load image"));
-        };
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error("Failed to load image"));
         img.src = normalizedUrl;
-        // Timeout after 10 seconds
-        setTimeout(() => {
-          console.log('[ImageUpload] Image load timeout');
-          reject(new Error("Image load timeout"));
-        }, 10000);
+        setTimeout(() => reject(new Error("Image load timeout")), 10000);
       });
-    } catch (e) {
-      console.warn('[ImageUpload] Could not verify image:', e);
+    } catch {
+      // Keep permissive behavior - let user add URL even if preview probe fails.
     }
 
-    console.log('[ImageUpload] Calling onImageUploaded with:', normalizedUrl);
     setIsChecking(false);
     onImageUploaded(normalizedUrl);
   };
 
-  // Quick paste handler
-  const handlePaste = (e: React.ClipboardEvent) => {
+  const handleSubmit = async () => {
+    if (mode === "file") {
+      await handleFileUpload();
+      return;
+    }
+    await handleUrlSubmit();
+  };
+
+  const handlePaste = (e: ReactClipboardEvent<HTMLInputElement>) => {
+    if (mode !== "url") return;
     const pastedText = e.clipboardData.getData("text");
     if (validateUrl(pastedText)) {
       e.preventDefault();
@@ -193,99 +282,119 @@ export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
         </button>
       )}
 
-      {/* Header */}
       <div className="flex items-center gap-2">
         <ImageIcon size={20} className="text-[var(--primary)]" />
         <h3 className="font-bold text-sm">Add Image</h3>
       </div>
 
-      {/* URL Input */}
-      <div className="space-y-2">
-        <label className="text-xs font-medium text-muted-foreground">
-          Image URL
-        </label>
-        <div className="relative">
-          <Link2
-            size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-          />
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => setMode("url")}
+          className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${
+            mode === "url"
+              ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
+              : "bg-accent/60 text-foreground hover:bg-accent"
+          }`}
+        >
+          URL
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode("file")}
+          className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${
+            mode === "file"
+              ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
+              : "bg-accent/60 text-foreground hover:bg-accent"
+          }`}
+        >
+          NIP-98 Upload
+        </button>
+      </div>
+
+      {mode === "url" ? (
+        <>
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-muted-foreground">Image URL</label>
+            <div className="relative">
+              <Link2
+                size={16}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+              />
+              <input
+                type="url"
+                value={imageUrl}
+                onChange={(e) => handleUrlChange(e.target.value)}
+                onPaste={handlePaste}
+                placeholder="https://example.com/image.jpg"
+                className="w-full pl-9 pr-10 py-2.5 bg-background border rounded-lg text-sm focus:ring-1 focus:ring-[var(--primary)] focus:border-[var(--primary)]"
+              />
+              {isValid && (
+                <Check
+                  size={16}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500"
+                />
+              )}
+            </div>
+          </div>
+
+          {imageUrl && isValid && !previewFailed && (
+            <div className="relative aspect-video bg-accent/30 rounded-lg overflow-hidden">
+              <img
+                src={normalizeImageUrl(imageUrl)}
+                alt="Preview"
+                className="w-full h-full object-contain"
+                onError={() => {
+                  setPreviewFailed(true);
+                }}
+              />
+            </div>
+          )}
+
+          {previewFailed && (
+            <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+              <p className="text-xs text-yellow-600 dark:text-yellow-400">
+                Preview failed. The image may still work when posted.
+              </p>
+            </div>
+          )}
+
+          <div className="text-[10px] text-muted-foreground">
+            <p className="mb-1">Supported hosts:</p>
+            <p className="opacity-70">
+              Imgur, Nostr.build, Nostrcheck.me, Void.cat, Catbox.moe,
+              GitHub, AWS S3, Supabase, Firebase, and direct image links.
+            </p>
+          </div>
+        </>
+      ) : (
+        <div className="space-y-2">
+          <label className="text-xs font-medium text-muted-foreground">Select image file</label>
           <input
-            type="url"
-            value={imageUrl}
-            onChange={(e) => handleUrlChange(e.target.value)}
-            onPaste={handlePaste}
-            placeholder="https://example.com/image.jpg"
-            className="w-full pl-9 pr-10 py-2.5 bg-background border rounded-lg text-sm focus:ring-1 focus:ring-[var(--primary)] focus:border-[var(--primary)]"
+            type="file"
+            accept="image/*"
+            onChange={(event) => {
+              const file = event.target.files?.[0] || null;
+              setSelectedFile(file);
+            }}
+            className="w-full bg-background border rounded-lg px-3 py-2 text-sm"
           />
-          {isValid && (
-            <Check
-              size={16}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500"
-            />
+          <p className="text-[11px] text-muted-foreground">
+            This signs your HTTP upload request with NIP-98 and sends it to your upload server.
+          </p>
+          {selectedFile && (
+            <div className="text-xs text-muted-foreground">
+              Selected: <span className="font-semibold text-foreground">{selectedFile.name}</span>
+            </div>
+          )}
+          {!uploadEndpoint && (
+            <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-700 dark:text-yellow-300">
+              Configure <code>VITE_NIP98_UPLOAD_URL</code> to enable file upload.
+            </div>
           )}
         </div>
-      </div>
-
-      {/* Preview */}
-      {imageUrl && isValid && !previewFailed && (
-        <div className="relative aspect-video bg-accent/30 rounded-lg overflow-hidden">
-          <img
-            src={normalizeImageUrl(imageUrl)}
-            alt="Preview"
-            className="w-full h-full object-contain"
-            onError={(e) => {
-              const currentSrc = e.currentTarget.src;
-              console.log('[ImageUpload] Preview image error for:', currentSrc);
-              
-              // Try PNG fallback for Imgur
-              if (currentSrc.endsWith('.jpg') || currentSrc.endsWith('.jpeg')) {
-                const pngUrl = currentSrc.replace(/\.(jpg|jpeg)$/, '.png');
-                console.log('[ImageUpload] Trying PNG fallback:', pngUrl);
-                e.currentTarget.src = pngUrl;
-                return;
-              }
-              
-              // Try without extension for Imgur
-              if (currentSrc.includes('i.imgur.com') && !currentSrc.match(/\.[a-z]{3,4}$/)) {
-                // Already no extension, give up
-                console.log('[ImageUpload] Already no extension, giving up');
-                setPreviewFailed(true);
-                return;
-              }
-              
-              if (currentSrc.includes('i.imgur.com')) {
-                const noExtUrl = currentSrc.replace(/\.[a-z]{3,4}$/, '');
-                console.log('[ImageUpload] Trying no-extension fallback:', noExtUrl);
-                e.currentTarget.src = noExtUrl;
-                return;
-              }
-              
-              console.log('[ImageUpload] All fallbacks failed, allowing use anyway');
-              setPreviewFailed(true);
-            }}
-          />
-        </div>
       )}
 
-      {/* Preview failed warning */}
-      {previewFailed && (
-        <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-          <p className="text-xs text-yellow-600 dark:text-yellow-400">
-            ⚠️ Could not load preview. The image may still work when posted.
-          </p>
-        </div>
-      )}
-
-      {/* Supported hosts info */}
-      <div className="text-[10px] text-muted-foreground">
-        <p className="mb-1">Supported hosts:</p>
-        <p className="opacity-70">
-          Imgur, Nostr.build, Nostrcheck.me, Void.cat, Catbox.moe,
-          GitHub, AWS S3, Supabase, Firebase, and any direct image links
-        </p>
-      </div>
-
-      {/* Actions */}
       <div className="flex gap-2 pt-2">
         {onCancel && (
           <button
@@ -296,44 +405,25 @@ export function ImageUpload({ onImageUploaded, onCancel }: ImageUploadProps) {
           </button>
         )}
         <button
-          onClick={handleSubmit}
-          disabled={!isValid || isChecking}
-          className="flex-1 px-4 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] text-sm font-bold rounded-lg hover:bg-[var(--primary-dark)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          onClick={() => void handleSubmit()}
+          disabled={
+            isChecking ||
+            (mode === "url" ? !isValid : !selectedFile || !uploadEndpoint)
+          }
+          className="flex-1 px-4 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] text-sm font-bold rounded-lg hover:bg-[var(--primary-dark)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center justify-center gap-2"
         >
-          {isChecking ? "Checking..." : "Add Image"}
+          {isChecking ? (
+            "Processing..."
+          ) : mode === "file" ? (
+            <>
+              <UploadCloud size={16} />
+              Upload File
+            </>
+          ) : (
+            "Add Image"
+          )}
         </button>
       </div>
     </div>
   );
 }
-
-// Old file upload code - commented out for now
-/*
-import { useState, useRef, useCallback } from "react";
-import { logger } from "../lib/logger";
-
-// List of image hosting services to try
-const HOSTING_SERVICES = [
-  {
-    name: "nostrcheck.me",
-    upload: async (file: File): Promise<string | null> => {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const response = await fetch("https://nostrcheck.me/api/upload.php", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      
-      const data = await response.json();
-      return data.url || data.data?.url || data.file_url || null;
-    },
-  },
-  // ... more services
-];
-
-// File upload implementation with drag & drop
-// Keeping this code for future use when CORS is resolved
-*/
