@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { Plus, Search, UserPlus, UserCheck, Beaker } from "lucide-react";
 import { CreateCommunityModal } from "../components/CreateCommunityModal";
 import { useCommunityMembership } from "../hooks/useCommunityMembership";
+import { buildCommunityTags, isCommunityClosed } from "../lib/community";
 
 export function CommunitiesPage() {
   const { ndk, user } = useNostr();
@@ -68,7 +69,7 @@ export function CommunitiesPage() {
     const image = community.tags.find(t => t[0] === "image")?.[1] || "";
     const d = community.tags.find(t => t[0] === "d")?.[1] || "";
     
-    return { name, description, image, d };
+    return { name, description, image, d, isClosed: isCommunityClosed(community) };
   };
 
   const handleCommunityClick = (community: NDKEvent) => {
@@ -88,15 +89,17 @@ export function CommunitiesPage() {
       const event = new NDKEvent(ndk);
       event.kind = 34550; // NIP-72 Community
       event.content = "A testing community for trying out features";
-      
-      event.tags = [
-        ["d", communityId],
-        ["name", "Testing Community"],
-        ["description", "A community for testing NostrReddit features. Feel free to post test content here!"],
-        ["image", ""],
-        ["rules", "1. Be respectful\n2. Test freely\n3. Have fun!"],
-        ["p", user.pubkey, "", "moderator"]
-      ];
+
+      event.tags = buildCommunityTags({
+        d: communityId,
+        name: "Testing Community",
+        description: "A community for testing NostrReddit features. Feel free to post test content here!",
+        image: "",
+        rules: "1. Be respectful\n2. Test freely\n3. Have fun!",
+        ownerPubkey: user.pubkey,
+        moderators: [user.pubkey],
+        closed: true,
+      });
 
       await event.publish();
       alert("Testing community created! Refresh the page to see it.");
@@ -194,7 +197,7 @@ export function CommunitiesPage() {
       {!isLoading && filteredCommunities.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filteredCommunities.map((community) => {
-            const { name, description, image, d } = getCommunityInfo(community);
+            const { name, description, image, d, isClosed } = getCommunityInfo(community);
             const isJoined = isMember(community.pubkey, d);
             const isJoining = joiningId === `${community.pubkey}:${d}`;
             
@@ -259,6 +262,12 @@ export function CommunitiesPage() {
                       </button>
                     )}
                   </div>
+
+                  {isClosed && (
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-amber-500 mb-2">
+                      Moderators only posting
+                    </p>
+                  )}
                   
                   <p className="text-gray-400 text-sm mb-4 line-clamp-2">
                     {description || "No description"}

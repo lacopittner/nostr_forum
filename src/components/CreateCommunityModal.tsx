@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { communitySchema, type CommunityFormData } from "../lib/validation";
 import { MarkdownContent } from "./MarkdownContent";
+import { buildCommunityTags } from "../lib/community";
 
 interface CreateCommunityModalProps {
   exit: () => void;
@@ -56,34 +57,18 @@ export function CreateCommunityModal({ exit }: CreateCommunityModalProps) {
       const event = new NDKEvent(ndk);
       event.kind = 34550; // NIP-72 Community
       event.content = data.description || "";
-      
-      // Build tags according to NIP-72
-      const tags: string[][] = [
-        ["d", communityId],
-        ["name", data.name],
-        ["description", data.description || ""],
-        ["image", data.image || ""],
-        ["rules", data.rules || ""]
-      ];
-      
-      // Add owner as first moderator
-      tags.push(["p", user.pubkey, "", "moderator"]);
-      
-      // Add flairs
-      flairs.forEach(flair => {
-        if (flair.trim()) {
-          tags.push(["flair", flair.trim()]);
-        }
+
+      event.tags = buildCommunityTags({
+        d: communityId,
+        name: data.name,
+        description: data.description || "",
+        image: data.image || "",
+        rules: data.rules || "",
+        ownerPubkey: user.pubkey,
+        moderators,
+        flairs,
+        closed: true,
       });
-      
-      // Add additional moderators
-      moderators.forEach(mod => {
-        if (mod.trim()) {
-          tags.push(["p", mod.trim(), "", "moderator"]);
-        }
-      });
-      
-      event.tags = tags;
 
       await event.publish();
       

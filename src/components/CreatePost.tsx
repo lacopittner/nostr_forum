@@ -29,21 +29,21 @@ import { ImageUpload } from "./ImageUpload";
 import { MarkdownContent } from "./MarkdownContent";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
+const COMMUNITY_APPROVAL_KIND = 4550;
+
+interface PostCommunityTarget {
+  pubkey: string;
+  id: string;
+  name: string;
+  atag: string;
+  flairs?: string[];
+  isClosed?: boolean;
+  isModerator?: boolean;
+}
+
 interface CreatePostProps {
-  community?: {
-    pubkey: string;
-    id: string;
-    name: string;
-    atag: string;
-    flairs?: string[];
-  };
-  communities?: Array<{
-    id: string;
-    pubkey: string;
-    name: string;
-    atag: string;
-    flairs?: string[];
-  }>;
+  community?: PostCommunityTarget;
+  communities?: PostCommunityTarget[];
   isModerator?: boolean;
   onPostCreated?: () => void;
 }
@@ -77,17 +77,33 @@ export function CreatePost({ community, communities, isModerator = false, onPost
   const selectedCommunity = isInCommunityPage
     ? community
     : communities?.find((c) => c.atag === selectedCommunityAtag);
-  // If in community page, only moderators can post
-  const canPublish = !!user && !!content.trim() && (isInCommunityPage ? isModerator : !!selectedCommunityAtag);
+  const selectedCommunityIsClosed = Boolean(selectedCommunity?.isClosed);
+  const selectedCommunityUserIsModerator = isInCommunityPage
+    ? isModerator
+    : Boolean(selectedCommunity?.isModerator);
+  const cannotPostInSelectedCommunity = Boolean(
+    user &&
+      selectedCommunity &&
+      selectedCommunityIsClosed &&
+      !selectedCommunityUserIsModerator
+  );
+  const canPublish = Boolean(
+    user &&
+      content.trim() &&
+      selectedCommunity &&
+      !cannotPostInSelectedCommunity
+  );
+  const hasWritableCommunity = Boolean(
+    communities?.some((item) => !item.isClosed || item.isModerator)
+  );
 
-  // Show error when not a moderator in community
   useEffect(() => {
-    if (isInCommunityPage && user && !isModerator) {
+    if (user && selectedCommunityIsClosed && !selectedCommunityUserIsModerator) {
       setPostError("Only moderators can post in this community");
     } else {
       setPostError(null);
     }
-  }, [isInCommunityPage, user, isModerator]);
+  }, [user, selectedCommunityIsClosed, selectedCommunityUserIsModerator]);
 
   const availableFlairs = selectedCommunity?.flairs || [];
 
@@ -338,6 +354,12 @@ export function CreatePost({ community, communities, isModerator = false, onPost
       return;
     }
 
+    if (selectedCommunityIsClosed && !selectedCommunityUserIsModerator) {
+      setPostError("Only moderators can post in this community");
+      showError("Only moderators can post in this community");
+      return;
+    }
+
     if (!checkRateLimit()) return;
 
     setIsPublishing(true);
@@ -357,12 +379,7 @@ export function CreatePost({ community, communities, isModerator = false, onPost
       // Build tags
       const tags: string[][] = [];
 
-      tags.push([
-        "a",
-        selectedCommunity.atag,
-        selectedCommunity.pubkey,
-        "root",
-      ]);
+      tags.push(["a", selectedCommunity.atag]);
       tags.push(["t", selectedCommunity.name.toLowerCase()]);
 
       // Add flair if selected
@@ -372,6 +389,19 @@ export function CreatePost({ community, communities, isModerator = false, onPost
 
       event.tags = tags;
       await event.publish();
+
+      if (selectedCommunityIsClosed && selectedCommunityUserIsModerator) {
+        const approval = new NDKEvent(ndk);
+        approval.kind = COMMUNITY_APPROVAL_KIND as any;
+        approval.content = "approved";
+        approval.tags = [
+          ["a", selectedCommunity.atag],
+          ["e", event.id],
+          ["p", event.pubkey],
+          ["status", "approved"],
+        ];
+        await approval.publish();
+      }
 
       // Reset form
       setContent("");
@@ -433,14 +463,24 @@ export function CreatePost({ community, communities, isModerator = false, onPost
           >
             <option value="">Select a community</option>
             {communities?.map((c) => (
-              <option key={c.atag} value={c.atag}>
+              <option
+                key={c.atag}
+                value={c.atag}
+                disabled={Boolean(c.isClosed && !c.isModerator)}
+              >
                 {c.name}
+                {c.isClosed && !c.isModerator ? " (moderators only)" : ""}
               </option>
             ))}
           </select>
           {(!communities || communities.length === 0) && (
             <p className="mt-1 text-xs text-muted-foreground">
               Join a community to post.
+            </p>
+          )}
+          {communities && communities.length > 0 && !hasWritableCommunity && (
+            <p className="mt-1 text-xs text-amber-500">
+              You are not a moderator in any joined closed community.
             </p>
           )}
         </div>

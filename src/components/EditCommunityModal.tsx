@@ -2,6 +2,7 @@ import { useNostr } from "../providers/NostrProvider";
 import { useState } from "react";
 import { NDKEvent } from "@nostr-dev-kit/ndk";
 import { X } from "lucide-react";
+import { buildCommunityTags, getCommunityFlairs, getCommunityModerators } from "../lib/community";
 
 interface EditCommunityModalProps {
   community: NDKEvent;
@@ -38,14 +39,21 @@ export function EditCommunityModal({ community, exit }: EditCommunityModalProps)
       
       // Get d tag from original community
       const dTag = community.tags.find(t => t[0] === "d")?.[1] || "";
-      
-      updatedEvent.tags = [
-        ["d", dTag],
-        ["name", name],
-        ["description", description],
-        ["image", image],
-        ["rules", rules]
-      ];
+      const moderators = getCommunityModerators(community);
+      const flairs = getCommunityFlairs(community);
+
+      updatedEvent.tags = buildCommunityTags({
+        d: dTag,
+        name,
+        description,
+        image,
+        rules,
+        ownerPubkey: community.pubkey,
+        moderators,
+        flairs,
+        closed: true,
+        baseTags: community.tags,
+      });
 
       await updatedEvent.publish();
       setSuccess("Community updated successfully!");

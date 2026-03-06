@@ -2,6 +2,7 @@ import { useNostr } from "../providers/NostrProvider";
 import { useState } from "react";
 import { NDKEvent } from "@nostr-dev-kit/ndk";
 import { X, Plus, Trash2 } from "lucide-react";
+import { buildCommunityTags, getCommunityFlairs, getCommunityModerators, getCommunityTagValue } from "../lib/community";
 
 interface ManageModeratorsModalProps {
   community: NDKEvent;
@@ -13,9 +14,7 @@ export function ManageModeratorsModal({ community, exit, onUpdate }: ManageModer
   const { ndk, user } = useNostr();
   const [moderators, setModerators] = useState<string[]>(() => {
     // Extract existing moderators from community event
-    return community.tags
-      .filter(t => t[0] === "p" && t[3] === "moderator")
-      .map(t => t[1]);
+    return getCommunityModerators(community);
   });
   const [newModerator, setNewModerator] = useState("");
   const [isPublishing, setIsPublishing] = useState(false);
@@ -53,34 +52,26 @@ export function ManageModeratorsModal({ community, exit, onUpdate }: ManageModer
     try {
       const updatedEvent = new NDKEvent(ndk);
       updatedEvent.kind = 34550;
-      
-      // Get d tag from original community
-      const dTag = community.tags.find(t => t[0] === "d")?.[1] || "";
-      const name = community.tags.find(t => t[0] === "name")?.[1] || "";
-      const description = community.tags.find(t => t[0] === "description")?.[1] || "";
-      const image = community.tags.find(t => t[0] === "image")?.[1] || "";
-      const rules = community.tags.find(t => t[0] === "rules")?.[1] || "";
-      
-      // Build tags with updated moderators
-      const tags: string[][] = [
-        ["d", dTag],
-        ["name", name],
-        ["description", description],
-        ["image", image],
-        ["rules", rules]
-      ];
-      
-      // Always include owner as moderator
-      tags.push(["p", community.pubkey, "", "moderator"]);
-      
-      // Add other moderators
-      moderators.forEach(mod => {
-        if (mod !== community.pubkey && mod.trim()) {
-          tags.push(["p", mod.trim(), "", "moderator"]);
-        }
+
+      const dTag = getCommunityTagValue(community, "d");
+      const name = getCommunityTagValue(community, "name");
+      const description = getCommunityTagValue(community, "description");
+      const image = getCommunityTagValue(community, "image");
+      const rules = getCommunityTagValue(community, "rules");
+      const flairs = getCommunityFlairs(community);
+
+      updatedEvent.tags = buildCommunityTags({
+        d: dTag,
+        name,
+        description,
+        image,
+        rules,
+        ownerPubkey: community.pubkey,
+        moderators,
+        flairs,
+        closed: true,
+        baseTags: community.tags,
       });
-      
-      updatedEvent.tags = tags;
       updatedEvent.content = description;
 
       await updatedEvent.publish();

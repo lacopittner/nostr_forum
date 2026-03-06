@@ -10,10 +10,18 @@ import { useGlobalBlocks } from "./useGlobalBlocks";
 import { logger } from "../lib/logger";
 import { SubscriptionManager } from "../lib/subscriptionManager";
 import { NDKProfile } from "../lib/types";
+import { getCommunityModerators, isCommunityClosed } from "../lib/community";
 
 export type FeedSort = "hot" | "new" | "top";
 export type FeedFilter = "all" | "following";
-export type CommunityEntry = { id: string; pubkey: string; name: string; atag: string };
+export type CommunityEntry = {
+  id: string;
+  pubkey: string;
+  name: string;
+  atag: string;
+  isClosed: boolean;
+  isModerator: boolean;
+};
 
 const COMMUNITY_KIND = 34550;
 const COMMUNITY_LIST_KIND = 30001;
@@ -454,7 +462,15 @@ export function useFeed() {
               if (!community) return null;
 
               const name = community.tags.find((tag) => tag[0] === "name")?.[1] || "Unnamed";
-              return { id, pubkey, name, atag };
+              const moderatorSet = new Set(getCommunityModerators(community));
+              return {
+                id,
+                pubkey,
+                name,
+                atag,
+                isClosed: isCommunityClosed(community),
+                isModerator: moderatorSet.has(user.pubkey),
+              };
             })
           );
 

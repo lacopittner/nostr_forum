@@ -1,6 +1,6 @@
 import { useNostr } from "../providers/NostrProvider";
 import { useParams, useNavigate } from "react-router-dom";
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
 import { Edit2, ArrowLeft, Shield, Users, ArrowBigUp, ArrowBigDown, Gavel, UserPlus, UserCheck, Search, Book, AlertCircle, HelpCircle } from "lucide-react";
 import { EditCommunityModal } from "../components/EditCommunityModal";
@@ -18,6 +18,7 @@ import { CreatePost } from "../components/CreatePost";
 import { MarkdownContent } from "../components/MarkdownContent";
 import { logger } from "../lib/logger";
 import { useToast } from "../lib/toast";
+import { getCommunityFlairs, getCommunityModerators, getCommunityTagValue, isCommunityClosed } from "../lib/community";
 
 const COMMUNITY_APPROVAL_KIND = 4550;
 const COMMUNITY_BLOCK_KIND = 34551;
@@ -137,10 +138,12 @@ export function CommunityDetailPage() {
   const { isCurrentUserBlocked } = useCommunityBlocks(community);
   
   // Check if user is moderator
-  const isModerator = user ? (
-    community?.pubkey === user.pubkey ||
-    community?.tags.some(t => t[0] === "p" && t[1] === user.pubkey && t[3] === "moderator")
-  ) : false;
+  const moderatorPubkeys = useMemo(
+    () => (community ? new Set(getCommunityModerators(community)) : new Set<string>()),
+    [community]
+  );
+  const isClosedPosting = community ? isCommunityClosed(community) : false;
+  const isModerator = user ? moderatorPubkeys.has(user.pubkey) : false;
 
   const isOwner = community && user && community.pubkey === user.pubkey;
   const hasJoined = community && isMember(community.pubkey, communityId || "");
@@ -346,8 +349,12 @@ export function CommunityDetailPage() {
     setFilteredPosts(filtered);
   }, [searchQuery, posts, blockedPubkeys, profiles, getAuthorNpub]);
 
-  const getPostModerationStatus = (postId: string): ModerationStatus | "pending" => {
-    return moderationState[postId]?.status || "approved";
+  const getPostModerationStatus = (post: NDKEvent): ModerationStatus | "pending" => {
+    const knownStatus = moderationState[post.id]?.status;
+    if (knownStatus) return knownStatus;
+    if (!isClosedPosting) return "approved";
+    if (moderatorPubkeys.has(post.pubkey)) return "approved";
+    return "pending";
   };
 
   // Handle edit post
@@ -518,23 +525,26 @@ export function CommunityDetailPage() {
   };
 
   const getCommunityInfo = () => {
-    if (!community) return { name: "", description: "", image: "", rules: "", moderators: [] as string[], flairs: [] as string[] };
-    
-    const moderators = community.tags
-      .filter(t => t[0] === "p" && t[3] === "moderator")
-      .map(t => t[1]);
-    
-    const flairs = community.tags
-      .filter(t => t[0] === "flair")
-      .map(t => t[1]);
+    if (!community) {
+      return {
+        name: "",
+        description: "",
+        image: "",
+        rules: "",
+        moderators: [] as string[],
+        flairs: [] as string[],
+        isClosed: false,
+      };
+    }
     
     return {
-      name: community.tags.find(t => t[0] === "name")?.[1] || "Unnamed",
-      description: community.tags.find(t => t[0] === "description")?.[1] || "",
-      image: community.tags.find(t => t[0] === "image")?.[1] || "",
-      rules: community.tags.find(t => t[0] === "rules")?.[1] || "",
-      moderators,
-      flairs
+      name: getCommunityTagValue(community, "name") || "Unnamed",
+      description: getCommunityTagValue(community, "description"),
+      image: getCommunityTagValue(community, "image"),
+      rules: getCommunityTagValue(community, "rules"),
+      moderators: getCommunityModerators(community),
+      flairs: getCommunityFlairs(community),
+      isClosed: isCommunityClosed(community),
     };
   };
 
@@ -544,8 +554,10 @@ export function CommunityDetailPage() {
 
   const communityInfo = getCommunityInfo();
   const visiblePosts = filteredPosts.filter(post => {
-    const status = getPostModerationStatus(post.id);
-    return status !== "rejected" || Boolean(isModerator);
+    const status = getPostModerationStatus(post);
+    if (status === "rejected") return Boolean(isModerator);
+    if (status === "pending") return Boolean(isModerator);
+    return true;
   });
 
   if (isLoading) {
@@ -734,6 +746,12 @@ export function CommunityDetailPage() {
                 </div>
               )}
 
+              {communityInfo.isClosed && (
+                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-amber-500">
+                  Posting: moderators only
+                </span>
+              )}
+
               {user && !isCurrentUserBlocked() && community && (
                 <button
                   onClick={() => setShowCreatePostForm((prev) => !prev)}
@@ -779,6 +797,7 @@ export function CommunityDetailPage() {
             name: communityInfo.name,
             atag: `34550:${pubkey}:${communityId}`,
             flairs: communityInfo.flairs,
+            isClosed: communityInfo.isClosed,
           }}
           isModerator={isModerator}
           onPostCreated={() => {
@@ -848,7 +867,7 @@ export function CommunityDetailPage() {
         )}
 
         {visiblePosts.map((post) => {
-          const postStatus = getPostModerationStatus(post.id);
+          const postStatus = getPostModerationStatus(post);
 
           return (
             <div key={post.id} className="bg-card border rounded-xl shadow-sm hover:border-[var(--primary)]/20 transition-all group">
