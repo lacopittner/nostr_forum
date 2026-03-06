@@ -52,6 +52,10 @@ function Feed() {
     handleReply,
     handleEditPost,
     handleDeletePost,
+    handleToggleMuteUser,
+    handleToggleMutePost,
+    isUserMuted,
+    isPostMuted,
   } = useFeed();
 
   return (
@@ -103,6 +107,10 @@ function Feed() {
         onSubmitReply={handleReply}
         onEditPost={handleEditPost}
         onDeletePost={handleDeletePost}
+        onToggleMuteUser={handleToggleMuteUser}
+        onToggleMutePost={handleToggleMutePost}
+        isUserMuted={isUserMuted}
+        isPostMuted={isPostMuted}
       />
     </div>
   );

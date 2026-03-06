@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import type { ChangeEvent, MouseEvent as ReactMouseEvent } from "react";
 import { NDKEvent } from "@nostr-dev-kit/ndk";
-import { ArrowBigDown, ArrowBigUp, Loader2, MessageSquare, Share2 } from "lucide-react";
+import { ArrowBigDown, ArrowBigUp, Loader2, MessageSquare, Share2, UserX } from "lucide-react";
 import { SavePostButton } from "../SavePostButton";
 import { ZapButton } from "../ZapButton";
 import { PostContent } from "../PostContent";
@@ -27,6 +27,10 @@ interface FeedItemProps {
   onSubmitReply: (post: NDKEvent) => void;
   onEditPost: (postId: string, newContent: string) => Promise<void> | void;
   onDeletePost: (postId: string) => Promise<void> | void;
+  onToggleMuteUser: (pubkey: string) => Promise<void> | void;
+  onToggleMutePost: (postId: string) => Promise<void> | void;
+  isAuthorMuted: boolean;
+  isPostMuted: boolean;
 }
 
 export function FeedItem({
@@ -48,6 +52,10 @@ export function FeedItem({
   onSubmitReply,
   onEditPost,
   onDeletePost,
+  onToggleMuteUser,
+  onToggleMutePost,
+  isAuthorMuted,
+  isPostMuted,
 }: FeedItemProps) {
   const handleOpenPost = useCallback(() => {
     onOpenPost(post.id);
@@ -107,6 +115,24 @@ export function FeedItem({
   const handleSubmitReply = useCallback(() => {
     onSubmitReply(post);
   }, [onSubmitReply, post]);
+
+  const handleToggleMuteUser = useCallback(
+    (event: ReactMouseEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+      if (!isAuthenticated) return;
+      void onToggleMuteUser(post.pubkey);
+    },
+    [isAuthenticated, onToggleMuteUser, post.pubkey]
+  );
+
+  const handleToggleMutePost = useCallback(
+    (event: ReactMouseEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+      if (!isAuthenticated) return;
+      void onToggleMutePost(post.id);
+    },
+    [isAuthenticated, onToggleMutePost, post.id]
+  );
 
   const authorName = profile?.displayName || profile?.name || `npub...${post.pubkey.slice(-8)}`;
 
@@ -210,6 +236,32 @@ export function FeedItem({
             >
               <Share2 size={16} />
               <span>Share</span>
+            </button>
+
+            <button
+              onClick={handleToggleMuteUser}
+              disabled={!isAuthenticated}
+              className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-colors text-xs font-bold ${
+                isAuthenticated
+                  ? "text-muted-foreground hover:bg-accent hover:text-foreground"
+                  : actionDisabledClass
+              }`}
+            >
+              <UserX size={16} />
+              <span>{isAuthorMuted ? "Unmute user" : "Mute user"}</span>
+            </button>
+
+            <button
+              onClick={handleToggleMutePost}
+              disabled={!isAuthenticated}
+              className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-colors text-xs font-bold ${
+                isAuthenticated
+                  ? "text-muted-foreground hover:bg-accent hover:text-foreground"
+                  : actionDisabledClass
+              }`}
+            >
+              <UserX size={16} />
+              <span>{isPostMuted ? "Unmute post" : "Mute post"}</span>
             </button>
 
             <div onClick={stopPropagation} className="flex items-center">

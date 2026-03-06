@@ -37,7 +37,7 @@ interface ProfileFormState {
   banner: string;
 }
 
-type ProfileTab = "posts" | "comments" | "saved" | "blocked" | "upvoted" | "downvoted";
+type ProfileTab = "posts" | "comments" | "saved" | "muted" | "upvoted" | "downvoted";
 
 const EDITABLE_PROFILE_KEYS = new Set([
   "name",
@@ -100,12 +100,22 @@ export function ProfilePage() {
   const { savedPosts, unsavePost } = useSavedPosts();
   const { followingCount, followersCount } = useFollows();
   const { verification, checkProfileNip05 } = useNip05();
-  const { blockedPubkeys, unblockUser } = useGlobalBlocks();
+  const {
+    blockedPubkeys,
+    mutedHashtags,
+    mutedEvents,
+    mutedCount,
+    unblockUser,
+    unmuteTag,
+    unmuteEvent,
+  } = useGlobalBlocks();
   const [profile, setProfile] = useState<NDKProfile | null>(null);
   const [posts, setPosts] = useState<NDKEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<ProfileTab>("posts");
   const [unblockingPubkeys, setUnblockingPubkeys] = useState<Set<string>>(new Set());
+  const [unmutingTags, setUnmutingTags] = useState<Set<string>>(new Set());
+  const [unmutingEvents, setUnmutingEvents] = useState<Set<string>>(new Set());
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileUpdateError, setProfileUpdateError] = useState<string | null>(null);
@@ -184,7 +194,7 @@ export function ProfilePage() {
     if (isOwnProfile) return;
     if (
       activeTab === "saved" ||
-      activeTab === "blocked" ||
+      activeTab === "muted" ||
       activeTab === "upvoted" ||
       activeTab === "downvoted"
     ) {
@@ -365,6 +375,46 @@ export function ProfilePage() {
     }
   };
 
+  const handleUnmuteTag = async (tag: string) => {
+    if (!isOwnProfile || !user) return;
+
+    setUnmutingTags((prev) => new Set(prev).add(tag));
+    try {
+      const ok = await unmuteTag(tag);
+      if (ok) {
+        success("Hashtag unmuted.");
+      } else {
+        showError("Failed to unmute hashtag.");
+      }
+    } finally {
+      setUnmutingTags((prev) => {
+        const next = new Set(prev);
+        next.delete(tag);
+        return next;
+      });
+    }
+  };
+
+  const handleUnmuteEvent = async (eventId: string) => {
+    if (!isOwnProfile || !user) return;
+
+    setUnmutingEvents((prev) => new Set(prev).add(eventId));
+    try {
+      const ok = await unmuteEvent(eventId);
+      if (ok) {
+        success("Post unmuted.");
+      } else {
+        showError("Failed to unmute post.");
+      }
+    } finally {
+      setUnmutingEvents((prev) => {
+        const next = new Set(prev);
+        next.delete(eventId);
+        return next;
+      });
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -396,6 +446,8 @@ export function ProfilePage() {
   const authoredComments = posts.filter((event) => event.tags.some((tag) => tag[0] === "e"));
   const authoredPosts = posts.filter((event) => !event.tags.some((tag) => tag[0] === "e"));
   const blockedUsers = Array.from(blockedPubkeys).sort();
+  const mutedTagsList = [...mutedHashtags];
+  const mutedEventIdsList = [...mutedEvents];
   const tabButtonClass = (tab: ProfileTab) =>
     `shrink-0 inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-bold whitespace-nowrap transition-all ${
       activeTab === tab
@@ -539,11 +591,11 @@ export function ProfilePage() {
             </button>
 
             <button
-              onClick={() => setActiveTab("blocked")}
-              className={tabButtonClass("blocked")}
+              onClick={() => setActiveTab("muted")}
+              className={tabButtonClass("muted")}
             >
               <UserX size={16} />
-              Blocked ({blockedUsers.length})
+              Muted ({mutedCount})
             </button>
 
             <button
@@ -699,42 +751,109 @@ export function ProfilePage() {
         </div>
       )}
 
-      {/* Blocked Tab */}
-      {activeTab === "blocked" && isOwnProfile && (
+      {/* Muted Tab */}
+      {activeTab === "muted" && isOwnProfile && (
         <div className="space-y-4">
-          {blockedUsers.length === 0 ? (
+          {mutedCount === 0 ? (
             <EmptyState
               icon={UserX}
-              title="No blocked users"
-              description="Users you block globally in Nostr will appear here."
+              title="No muted items"
+              description="Muted users, hashtags, and posts will appear here."
             />
           ) : (
             <>
               <div className="bg-accent/30 border rounded-lg px-4 py-3 text-sm text-muted-foreground">
-                This uses your Nostr global mute list (kind 10000).
+                This is your NIP-51 mute list (kind 10000) synced via relays.
               </div>
-              {blockedUsers.map((pubkey) => {
-                const isUnblocking = unblockingPubkeys.has(pubkey);
-                return (
-                  <div
-                    key={pubkey}
-                    className="bg-card border rounded-xl shadow-sm p-4 flex items-center justify-between gap-4"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-foreground">Blocked user</p>
-                      <p className="text-xs text-muted-foreground font-mono truncate">{pubkey}</p>
-                    </div>
-                    <button
-                      onClick={() => void handleUnblockUser(pubkey)}
-                      disabled={isUnblocking}
-                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-bold bg-accent/60 hover:bg-accent transition-colors disabled:opacity-60"
-                    >
-                      {isUnblocking ? <Loader2 size={14} className="animate-spin" /> : null}
-                      Unblock
-                    </button>
-                  </div>
-                );
-              })}
+
+              {blockedUsers.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-xs font-black uppercase tracking-[0.16em] text-muted-foreground">
+                    Muted Users ({blockedUsers.length})
+                  </h3>
+                  {blockedUsers.map((pubkey) => {
+                    const isUnblocking = unblockingPubkeys.has(pubkey);
+                    return (
+                      <div
+                        key={pubkey}
+                        className="bg-card border rounded-xl shadow-sm p-4 flex items-center justify-between gap-4"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-foreground">Muted user</p>
+                          <p className="text-xs text-muted-foreground font-mono truncate">{pubkey}</p>
+                        </div>
+                        <button
+                          onClick={() => void handleUnblockUser(pubkey)}
+                          disabled={isUnblocking}
+                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-bold bg-accent/60 hover:bg-accent transition-colors disabled:opacity-60"
+                        >
+                          {isUnblocking ? <Loader2 size={14} className="animate-spin" /> : null}
+                          Unmute
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {mutedTagsList.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-xs font-black uppercase tracking-[0.16em] text-muted-foreground">
+                    Muted Hashtags ({mutedTagsList.length})
+                  </h3>
+                  {mutedTagsList.map((tag) => {
+                    const isPending = unmutingTags.has(tag);
+                    return (
+                      <div
+                        key={tag}
+                        className="bg-card border rounded-xl shadow-sm p-4 flex items-center justify-between gap-4"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-foreground">#{tag}</p>
+                        </div>
+                        <button
+                          onClick={() => void handleUnmuteTag(tag)}
+                          disabled={isPending}
+                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-bold bg-accent/60 hover:bg-accent transition-colors disabled:opacity-60"
+                        >
+                          {isPending ? <Loader2 size={14} className="animate-spin" /> : null}
+                          Unmute
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {mutedEventIdsList.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-xs font-black uppercase tracking-[0.16em] text-muted-foreground">
+                    Muted Posts ({mutedEventIdsList.length})
+                  </h3>
+                  {mutedEventIdsList.map((eventId) => {
+                    const isPending = unmutingEvents.has(eventId);
+                    return (
+                      <div
+                        key={eventId}
+                        className="bg-card border rounded-xl shadow-sm p-4 flex items-center justify-between gap-4"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-foreground">Muted post</p>
+                          <p className="text-xs text-muted-foreground font-mono truncate">{eventId}</p>
+                        </div>
+                        <button
+                          onClick={() => void handleUnmuteEvent(eventId)}
+                          disabled={isPending}
+                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-bold bg-accent/60 hover:bg-accent transition-colors disabled:opacity-60"
+                        >
+                          {isPending ? <Loader2 size={14} className="animate-spin" /> : null}
+                          Unmute
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </>
           )}
         </div>

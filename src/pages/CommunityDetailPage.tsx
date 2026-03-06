@@ -2,7 +2,7 @@ import { useNostr } from "../providers/NostrProvider";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { NDKEvent, NDKKind } from "@nostr-dev-kit/ndk";
-import { Edit2, ArrowLeft, Shield, Users, ArrowBigUp, ArrowBigDown, Gavel, UserPlus, UserCheck, Search, Book, AlertCircle, HelpCircle } from "lucide-react";
+import { Edit2, ArrowLeft, Shield, Users, ArrowBigUp, ArrowBigDown, Gavel, UserPlus, UserCheck, Search, Book, AlertCircle, HelpCircle, UserX } from "lucide-react";
 import { EditCommunityModal } from "../components/EditCommunityModal";
 import { ManageModeratorsModal } from "../components/ManageModeratorsModal";
 import { ManageBlockedUsersModal } from "../components/ManageBlockedUsersModal";
@@ -121,7 +121,15 @@ export function CommunityDetailPage() {
   
   // Membership
   const { isMember, joinCommunity, leaveCommunity } = useCommunityMembership();
-  const { blockedPubkeys, isBlocked } = useGlobalBlocks();
+  const {
+    isEventMuted,
+    isBlocked,
+    isEventIdMuted,
+    blockUser,
+    unblockUser,
+    muteEvent,
+    unmuteEvent,
+  } = useGlobalBlocks();
   const [isJoining, setIsJoining] = useState(false);
   
   // Voting - use the custom hook instead of duplicating logic
@@ -240,7 +248,7 @@ export function CommunityDetailPage() {
     );
 
     postSub.on("event", (event: NDKEvent) => {
-      if (isBlocked(event.pubkey)) return;
+      if (isEventMuted(event)) return;
       if (!seenPostIds.current.has(event.id)) {
         seenPostIds.current.add(event.id);
         fetchProfile(event.pubkey);
@@ -296,19 +304,19 @@ export function CommunityDetailPage() {
       postSub.stop();
       moderationSub.stop();
     };
-  }, [community, ndk, pubkey, communityId, fetchProfile, processIncomingReaction, processIncomingDeletion, isBlocked]);
+  }, [community, ndk, pubkey, communityId, fetchProfile, processIncomingReaction, processIncomingDeletion, isEventMuted]);
 
   // Filter posts by search query
   useEffect(() => {
     if (!searchQuery.trim()) {
-      setFilteredPosts(posts.filter((post) => !blockedPubkeys.has(post.pubkey)));
+      setFilteredPosts(posts.filter((post) => !isEventMuted(post)));
       return;
     }
 
     const parsedQuery = parseCommunitySearchQuery(searchQuery);
 
     const filtered = posts.filter((post) => {
-      if (blockedPubkeys.has(post.pubkey)) return false;
+      if (isEventMuted(post)) return false;
 
       const profile = profiles[post.pubkey] || {};
       const content = post.content.toLowerCase();
@@ -347,7 +355,7 @@ export function CommunityDetailPage() {
     });
 
     setFilteredPosts(filtered);
-  }, [searchQuery, posts, blockedPubkeys, profiles, getAuthorNpub]);
+  }, [searchQuery, posts, profiles, getAuthorNpub, isEventMuted]);
 
   const getPostModerationStatus = (post: NDKEvent): ModerationStatus | "pending" => {
     const knownStatus = moderationState[post.id]?.status;
@@ -550,6 +558,58 @@ export function CommunityDetailPage() {
 
   const handleVote = (post: NDKEvent, type: "UPVOTE" | "DOWNVOTE") => {
     handleReaction(post, type);
+  };
+
+  const handleToggleMuteUser = async (targetPubkey: string) => {
+    if (!user) return;
+    if (targetPubkey === user.pubkey) {
+      showError("You cannot mute your own account");
+      return;
+    }
+
+    if (isBlocked(targetPubkey)) {
+      const ok = await unblockUser(targetPubkey);
+      if (!ok) {
+        showError("Failed to unmute user");
+        return;
+      }
+      success("User unmuted");
+      return;
+    }
+
+    const ok = await blockUser(targetPubkey);
+    if (!ok) {
+      showError("Failed to mute user");
+      return;
+    }
+
+    setPosts((prev) => prev.filter((post) => post.pubkey !== targetPubkey));
+    setFilteredPosts((prev) => prev.filter((post) => post.pubkey !== targetPubkey));
+    success("User muted");
+  };
+
+  const handleToggleMutePost = async (postId: string) => {
+    if (!user) return;
+
+    if (isEventIdMuted(postId)) {
+      const ok = await unmuteEvent(postId);
+      if (!ok) {
+        showError("Failed to unmute post");
+        return;
+      }
+      success("Post unmuted");
+      return;
+    }
+
+    const ok = await muteEvent(postId);
+    if (!ok) {
+      showError("Failed to mute post");
+      return;
+    }
+
+    setPosts((prev) => prev.filter((post) => post.id !== postId));
+    setFilteredPosts((prev) => prev.filter((post) => post.id !== postId));
+    success("Post muted");
   };
 
   const communityInfo = getCommunityInfo();
@@ -939,6 +999,23 @@ export function CommunityDetailPage() {
                   />
                   
                   <div className="flex items-center gap-2">
+                    {user && user.pubkey !== post.pubkey && (
+                      <>
+                        <button
+                          onClick={() => void handleToggleMuteUser(post.pubkey)}
+                          className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors"
+                          title={isBlocked(post.pubkey) ? "Unmute user" : "Mute user"}
+                        >
+                          <UserX size={14} />
+                        </button>
+                        <button
+                          onClick={() => void handleToggleMutePost(post.id)}
+                          className="px-2.5 py-1.5 text-xs font-bold text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors"
+                        >
+                          {isEventIdMuted(post.id) ? "Unmute" : "Mute"}
+                        </button>
+                      </>
+                    )}
                     <SavePostButton post={post} size="sm" />
                     <ZapButton 
                       targetPubkey={post.pubkey} 

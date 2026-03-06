@@ -54,7 +54,15 @@ export function PostDetailPage() {
   const { postId } = useParams<{ postId: string }>();
   const navigate = useNavigate();
   const { success, error: showError } = useToast();
-  const { blockedPubkeys, isBlocked, blockUser, unblockUser } = useGlobalBlocks();
+  const {
+    isBlocked,
+    isEventMuted,
+    isEventIdMuted,
+    blockUser,
+    unblockUser,
+    muteEvent,
+    unmuteEvent,
+  } = useGlobalBlocks();
   
   const [post, setPost] = useState<NDKEvent | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -150,7 +158,7 @@ export function PostDetailPage() {
     );
 
     commentSub.on("event", (event: NDKEvent) => {
-      if (isBlocked(event.pubkey)) return;
+      if (isEventMuted(event)) return;
       if (!isRedditLikeCommentEvent(event, postId)) return;
       if (seenEventIds.current.has(event.id)) return;
       seenEventIds.current.add(event.id);
@@ -191,7 +199,7 @@ export function PostDetailPage() {
     return () => {
       commentSub.stop();
     };
-  }, [ndk, postId, fetchProfile, processIncomingReaction, processIncomingDeletion, isBlocked, isRedditLikeCommentEvent]);
+  }, [ndk, postId, fetchProfile, processIncomingReaction, processIncomingDeletion, isEventMuted, isRedditLikeCommentEvent]);
 
   const buildCommentTree = () => {
     const commentList = Array.from(commentsMap.current.values());
@@ -247,16 +255,16 @@ export function PostDetailPage() {
   }, [sortBy, reactions]);
 
   useEffect(() => {
-    if (blockedPubkeys.size === 0) return;
+    if (commentsMap.current.size === 0) return;
 
     for (const [id, event] of commentsMap.current.entries()) {
-      if (blockedPubkeys.has(event.pubkey)) {
+      if (isEventMuted(event)) {
         commentsMap.current.delete(id);
       }
     }
 
     buildCommentTree();
-  }, [blockedPubkeys]);
+  }, [isEventMuted]);
 
   useEffect(() => {
     if (!isCommentFullscreenOpen) return;
@@ -715,6 +723,8 @@ export function PostDetailPage() {
 
   const isOwnPost = user && post && post.pubkey === user.pubkey;
   const isPostAuthorBlocked = post ? isBlocked(post.pubkey) : false;
+  const isPostMutedById = post ? isEventIdMuted(post.id) : false;
+  const isPostMuted = post ? isEventMuted(post) : false;
   const actionsMenuRef = useRef<HTMLDivElement>(null);
 
   const handleToggleGlobalBlock = async () => {
@@ -735,6 +745,21 @@ export function PostDetailPage() {
       if (ok) success("User blocked globally");
       else showError("Failed to block user");
     }
+  };
+
+  const handleTogglePostMute = async () => {
+    if (!post || !user) return;
+
+    const targetPostId = post.id;
+    const isMutedById = isEventIdMuted(targetPostId);
+    const ok = isMutedById ? await unmuteEvent(targetPostId) : await muteEvent(targetPostId);
+
+    if (!ok) {
+      showError(isMutedById ? "Failed to unmute post" : "Failed to mute post");
+      return;
+    }
+
+    success(isMutedById ? "Post unmuted" : "Post muted");
   };
 
   // Close menu when clicking outside
@@ -779,7 +804,7 @@ export function PostDetailPage() {
     );
   }
 
-  if (isPostAuthorBlocked) {
+  if (isPostMuted) {
     return (
       <div className="space-y-6">
         <button
@@ -790,13 +815,27 @@ export function PostDetailPage() {
           <span>Back</span>
         </button>
         <div className="bg-card border rounded-xl p-8 text-center shadow-sm">
-          <p className="text-muted-foreground mb-4">This post is hidden because the author is globally blocked.</p>
-          <button
-            onClick={() => void handleToggleGlobalBlock()}
-            className="px-4 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-lg font-bold hover:bg-[var(--primary-dark)]"
-          >
-            Unblock Author
-          </button>
+          <p className="text-muted-foreground mb-4">
+            This post is hidden by your mute settings.
+          </p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {isPostMutedById && (
+              <button
+                onClick={() => void handleTogglePostMute()}
+                className="px-4 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] rounded-lg font-bold hover:bg-[var(--primary-dark)]"
+              >
+                Unmute Post
+              </button>
+            )}
+            {isPostAuthorBlocked && (
+              <button
+                onClick={() => void handleToggleGlobalBlock()}
+                className="px-4 py-2 bg-accent text-foreground rounded-lg font-bold hover:bg-accent/80"
+              >
+                Unmute Author
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -982,6 +1021,15 @@ export function PostDetailPage() {
                               className="w-full px-4 py-2 text-left text-sm hover:bg-accent text-muted-foreground"
                             >
                               Report Post
+                            </button>
+                            <button
+                              onClick={() => {
+                                void handleTogglePostMute();
+                                setShowActionsMenu(false);
+                              }}
+                              className="w-full px-4 py-2 text-left text-sm hover:bg-accent text-muted-foreground"
+                            >
+                              {isPostMutedById ? "Unmute Post" : "Mute Post"}
                             </button>
                             <button
                               onClick={() => {

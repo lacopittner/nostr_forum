@@ -26,7 +26,7 @@ export function ExplorePage() {
   const [trendingTags, setTrendingTags] = useState<TrendingHashtag[]>([]);
   const [trendingCommunities, setTrendingCommunities] = useState<TrendingCommunity[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const { blockedPubkeys } = useGlobalBlocks();
+  const { isEventMuted } = useGlobalBlocks();
 
   useEffect(() => {
     const loadTrending = async () => {
@@ -41,7 +41,7 @@ export function ExplorePage() {
         // Count hashtags
         const tagCounts = new Map<string, number>();
         Array.from(events).forEach((event: NDKEvent) => {
-          if (blockedPubkeys.has(event.pubkey)) return;
+          if (isEventMuted(event)) return;
           event.tags
             .filter((tag) => tag[0] === "t")
             .forEach((tag) => {
@@ -86,7 +86,7 @@ export function ExplorePage() {
     };
 
     loadTrending();
-  }, [ndk, blockedPubkeys]);
+  }, [ndk, isEventMuted]);
 
   if (isLoading) {
     return (

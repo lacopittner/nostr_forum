@@ -37,6 +37,10 @@ interface FeedListProps {
   onSubmitReply: (post: NDKEvent) => void;
   onEditPost: (postId: string, newContent: string) => Promise<void> | void;
   onDeletePost: (postId: string) => Promise<void> | void;
+  onToggleMuteUser: (pubkey: string) => Promise<void> | void;
+  onToggleMutePost: (postId: string) => Promise<void> | void;
+  isUserMuted: (pubkey: string) => boolean;
+  isPostMuted: (postId: string) => boolean;
 }
 
 const SORT_OPTIONS: FeedSort[] = ["hot", "new", "top"];
@@ -70,6 +74,10 @@ export function FeedList({
   onSubmitReply,
   onEditPost,
   onDeletePost,
+  onToggleMuteUser,
+  onToggleMutePost,
+  isUserMuted,
+  isPostMuted,
 }: FeedListProps) {
   const navigate = useNavigate();
 
@@ -203,6 +211,10 @@ export function FeedList({
               onSubmitReply={onSubmitReply}
               onEditPost={onEditPost}
               onDeletePost={onDeletePost}
+              onToggleMuteUser={onToggleMuteUser}
+              onToggleMutePost={onToggleMutePost}
+              isAuthorMuted={isUserMuted(post.pubkey)}
+              isPostMuted={isPostMuted(post.id)}
             />
           ))}
         </div>

@@ -80,7 +80,16 @@ export function useFeed() {
   const [isReplyPublishing, setIsReplyPublishing] = useState(false);
 
   const { following } = useFollows();
-  const { blockedPubkeys } = useGlobalBlocks();
+  const {
+    blockedPubkeys,
+    isEventMuted,
+    isBlocked,
+    isEventIdMuted,
+    blockUser,
+    unblockUser,
+    muteEvent,
+    unmuteEvent,
+  } = useGlobalBlocks();
   const {
     reactions,
     userVotes,
@@ -103,6 +112,7 @@ export function useFeed() {
   const commentCountFetchQueue = useRef(new Set<string>());
   const emptyScanWindows = useRef(0);
   const blockedPubkeysRef = useRef(blockedPubkeys);
+  const isEventMutedRef = useRef(isEventMuted);
   const followingRef = useRef(following);
   const feedFilterRef = useRef(feedFilter);
   const untilRef = useRef<number | undefined>(undefined);
@@ -141,6 +151,10 @@ export function useFeed() {
   useEffect(() => {
     blockedPubkeysRef.current = blockedPubkeys;
   }, [blockedPubkeys]);
+
+  useEffect(() => {
+    isEventMutedRef.current = isEventMuted;
+  }, [isEventMuted]);
 
   useEffect(() => {
     followingRef.current = following;
@@ -329,7 +343,7 @@ export function useFeed() {
           batchesScanned += 1;
 
           const visibleInBatch = fetchedEventList.filter((event) => {
-            if (blockedPubkeysRef.current.has(event.pubkey)) return false;
+            if (isEventMutedRef.current(event)) return false;
             if (!isRedditLikePost(event)) return false;
             const eventKey = getEventDedupKey(event);
             if (seenEventIds.current.has(eventKey)) return false;
@@ -502,7 +516,7 @@ export function useFeed() {
 
       postSub.on("event", (event: NDKEvent) => {
         if (!isActive) return;
-        if (blockedPubkeysRef.current.has(event.pubkey)) return;
+        if (isEventMutedRef.current(event)) return;
         if (!isRedditLikePost(event)) return;
         const eventKey = getEventDedupKey(event);
         if (seenEventIds.current.has(eventKey)) return;
@@ -723,6 +737,67 @@ export function useFeed() {
     [user, posts, ndk, replyingTo, showError, success]
   );
 
+  const handleToggleMuteUser = useCallback(
+    async (targetPubkey: string) => {
+      if (!user) return;
+      if (targetPubkey === user.pubkey) {
+        showError("You cannot mute your own account");
+        return;
+      }
+
+      if (isBlocked(targetPubkey)) {
+        const ok = await unblockUser(targetPubkey);
+        if (!ok) {
+          showError("Failed to unmute user");
+          return;
+        }
+        success("User unmuted");
+        return;
+      }
+
+      const ok = await blockUser(targetPubkey);
+      if (!ok) {
+        showError("Failed to mute user");
+        return;
+      }
+
+      setPosts((prev) => prev.filter((post) => post.pubkey !== targetPubkey));
+      success("User muted");
+    },
+    [user, isBlocked, unblockUser, blockUser, showError, success]
+  );
+
+  const handleToggleMutePost = useCallback(
+    async (postId: string) => {
+      if (!user) return;
+
+      if (isEventIdMuted(postId)) {
+        const ok = await unmuteEvent(postId);
+        if (!ok) {
+          showError("Failed to unmute post");
+          return;
+        }
+        success("Post unmuted");
+        return;
+      }
+
+      const ok = await muteEvent(postId);
+      if (!ok) {
+        showError("Failed to mute post");
+        return;
+      }
+
+      setPosts((prev) => prev.filter((post) => post.id !== postId));
+      setCommentCounts((prev) => {
+        const next = { ...prev };
+        delete next[postId];
+        return next;
+      });
+      success("Post muted");
+    },
+    [user, isEventIdMuted, muteEvent, unmuteEvent, showError, success]
+  );
+
   return {
     user,
     myCommunities,
@@ -756,5 +831,9 @@ export function useFeed() {
     handleReply,
     handleEditPost,
     handleDeletePost,
+    handleToggleMuteUser,
+    handleToggleMutePost,
+    isUserMuted: isBlocked,
+    isPostMuted: isEventIdMuted,
   };
 }
