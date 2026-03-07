@@ -337,44 +337,74 @@ export function SearchPage() {
           ))}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div className="flex items-center gap-2 bg-accent/30 rounded-lg px-3 py-2">
-            <Filter size={16} className="text-muted-foreground" />
-            <input
-              type="text"
-              value={communityFilter}
-              onChange={(e) => setCommunityFilter(e.target.value)}
-              placeholder="Community filter (atag contains...)"
-              className="w-full bg-transparent text-sm outline-none"
-            />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Community</label>
+            <div className="flex items-center gap-2 bg-accent/40 border border-accent/60 rounded-lg px-3 py-2.5 hover:border-[var(--primary)]/30 transition-colors">
+              <Filter size={14} className="text-muted-foreground flex-shrink-0" />
+              <input
+                type="text"
+                value={communityFilter}
+                onChange={(e) => setCommunityFilter(e.target.value)}
+                placeholder="atag contains..."
+                className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
+              />
+            </div>
           </div>
-          <div className="flex items-center gap-2 bg-accent/30 rounded-lg px-3 py-2">
-            <Filter size={16} className="text-muted-foreground" />
-            <input
-              type="text"
-              value={authorFilter}
-              onChange={(e) => setAuthorFilter(e.target.value)}
-              placeholder="Author pubkey filter (optional)"
-              className="w-full bg-transparent text-sm outline-none"
-            />
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Author Pubkey</label>
+            <div className="flex items-center gap-2 bg-accent/40 border border-accent/60 rounded-lg px-3 py-2.5 hover:border-[var(--primary)]/30 transition-colors">
+              <Filter size={14} className="text-muted-foreground flex-shrink-0" />
+              <input
+                type="text"
+                value={authorFilter}
+                onChange={(e) => setAuthorFilter(e.target.value)}
+                placeholder="Optional"
+                className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
+              />
+            </div>
           </div>
-          <div className="flex items-center gap-2 bg-accent/30 rounded-lg px-3 py-2">
-            <Calendar size={16} className="text-muted-foreground" />
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              className="w-full bg-transparent text-sm outline-none"
-            />
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">From Date</label>
+            <div className="flex items-center gap-2 bg-accent/40 border border-accent/60 rounded-lg px-0 py-1 overflow-hidden hover:border-[var(--primary)]/30 transition-colors focus-within:border-[var(--primary)] focus-within:ring-1 focus-within:ring-[var(--primary)]/20">
+              <Calendar size={14} className="text-muted-foreground flex-shrink-0 ml-3" />
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="flex-1 bg-transparent text-sm outline-none cursor-pointer py-2.5 px-2 [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-60 [&::-webkit-calendar-picker-indicator]:hover:opacity-100 [&::-webkit-outer-spin-button]:hidden [&::-webkit-inner-spin-button]:hidden"
+              />
+              {dateFrom && (
+                <button
+                  onClick={() => setDateFrom("")}
+                  className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 mr-3 text-lg leading-none"
+                  title="Clear date"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-2 bg-accent/30 rounded-lg px-3 py-2">
-            <Calendar size={16} className="text-muted-foreground" />
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              className="w-full bg-transparent text-sm outline-none"
-            />
+          <div>
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">To Date</label>
+            <div className="flex items-center gap-2 bg-accent/40 border border-accent/60 rounded-lg px-0 py-1 overflow-hidden hover:border-[var(--primary)]/30 transition-colors focus-within:border-[var(--primary)] focus-within:ring-1 focus-within:ring-[var(--primary)]/20">
+              <Calendar size={14} className="text-muted-foreground flex-shrink-0 ml-3" />
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="flex-1 bg-transparent text-sm outline-none cursor-pointer py-2.5 px-2 [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-60 [&::-webkit-calendar-picker-indicator]:hover:opacity-100 [&::-webkit-outer-spin-button]:hidden [&::-webkit-inner-spin-button]:hidden"
+              />
+              {dateTo && (
+                <button
+                  onClick={() => setDateTo("")}
+                  className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 mr-3 text-lg leading-none"
+                  title="Clear date"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
