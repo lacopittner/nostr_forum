@@ -8,7 +8,7 @@ import { useCommunityMembership } from "../hooks/useCommunityMembership";
 import { buildCommunityTags, isCommunityClosed } from "../lib/community";
 
 export function CommunitiesPage() {
-  const { ndk, user } = useNostr();
+  const { ndk, user, requireSigner } = useNostr();
   const navigate = useNavigate();
   const { isMember, joinCommunity, leaveCommunity } = useCommunityMembership();
   const [communities, setCommunities] = useState<NDKEvent[]>([]);
@@ -80,6 +80,13 @@ export function CommunitiesPage() {
   const createTestingCommunity = async () => {
     if (!user) {
       alert("Please log in first to create a community");
+      return;
+    }
+
+    // Ensure signer is available for signing
+    const hasSigner = await requireSigner();
+    if (!hasSigner) {
+      alert("Signing capability required. Please unlock with PIN.");
       return;
     }
 

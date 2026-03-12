@@ -100,7 +100,7 @@ const extractPostSearchTags = (post: NDKEvent): string[] => {
 };
 
 export function CommunityDetailPage() {
-  const { ndk, user } = useNostr();
+  const { ndk, user, requireSigner } = useNostr();
   const { pubkey, communityId } = useParams<{ pubkey: string; communityId: string }>();
   const navigate = useNavigate();
   const { error: showError, success } = useToast();
@@ -470,6 +470,13 @@ export function CommunityDetailPage() {
   const handleModeratePost = async (postId: string, status: ModerationStatus) => {
     if (!isModerator || !communityId || !pubkey) {
       showError("Only moderators can approve or reject posts");
+      return;
+    }
+
+    // Ensure signer is available for signing
+    const hasSigner = await requireSigner();
+    if (!hasSigner) {
+      showError("Signing capability required. Please unlock with PIN.");
       return;
     }
 

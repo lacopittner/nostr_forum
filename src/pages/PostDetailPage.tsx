@@ -50,7 +50,7 @@ interface Comment {
 }
 
 export function PostDetailPage() {
-  const { ndk, user } = useNostr();
+  const { ndk, user, requireSigner } = useNostr();
   const { postId } = useParams<{ postId: string }>();
   const navigate = useNavigate();
   const { success, error: showError } = useToast();
@@ -516,6 +516,13 @@ export function PostDetailPage() {
     
     if (!replyText?.trim() || !user || !post || !targetId || !targetPubkey || isPublishing) return;
 
+    // Ensure signer is available for signing
+    const hasSigner = await requireSigner();
+    if (!hasSigner) {
+      setReplyError("Signing capability required. Please unlock with PIN.");
+      return;
+    }
+
     setIsPublishing(true);
     setReplyError(null);
     
@@ -585,6 +592,13 @@ export function PostDetailPage() {
   const handleNestedReply = async (parentId: string, parentPubkey: string, content: string) => {
     if (!content.trim() || !user || !post || !parentId || !parentPubkey) return;
 
+    // Ensure signer is available for signing
+    const hasSigner = await requireSigner();
+    if (!hasSigner) {
+      setReplyError("Signing capability required. Please unlock with PIN.");
+      return;
+    }
+
     setIsPublishing(true);
     setReplyError(null);
     
@@ -631,6 +645,13 @@ export function PostDetailPage() {
   const handleDeleteComment = async (commentId: string) => {
     if (!user) return;
     
+    // Ensure signer is available for signing
+    const hasSigner = await requireSigner();
+    if (!hasSigner) {
+      showError("Signing capability required. Please unlock with PIN.");
+      return;
+    }
+    
     try {
       // Create deletion event (Kind 5)
       const deletion = new NDKEvent(ndk);
@@ -663,6 +684,13 @@ export function PostDetailPage() {
       showError("You can only delete your own posts");
       return;
     }
+
+    // Ensure signer is available for signing
+    const hasSigner = await requireSigner();
+    if (!hasSigner) {
+      showError("Signing capability required. Please unlock with PIN.");
+      return;
+    }
     
     if (!confirm("Are you sure you want to delete this post?")) return;
     
@@ -690,6 +718,13 @@ export function PostDetailPage() {
     
     const trimmedContent = editContent.trim();
     if (!trimmedContent || trimmedContent === post.content.trim()) return;
+    
+    // Ensure signer is available for signing
+    const hasSigner = await requireSigner();
+    if (!hasSigner) {
+      showError("Signing capability required. Please unlock with PIN.");
+      return;
+    }
     
     try {
       const deletion = new NDKEvent(ndk);

@@ -95,7 +95,7 @@ const compactWebsiteLabel = (website: string): string => {
 export function ProfilePage() {
   const { pubkey: paramPubkey } = useParams<{ pubkey: string }>();
   const navigate = useNavigate();
-  const { ndk, user } = useNostr();
+  const { ndk, user, requireSigner } = useNostr();
   const { success, error: showError } = useToast();
   const { savedPosts, unsavePost } = useSavedPosts();
   const { followingCount, followersCount } = useFollows();
@@ -227,6 +227,13 @@ export function ProfilePage() {
 
   const handleSaveProfile = async () => {
     if (!user || !isOwnProfile) return;
+
+    // Ensure signer is available for signing
+    const hasSigner = await requireSigner();
+    if (!hasSigner) {
+      setProfileUpdateError("Signing capability required. Please unlock with PIN.");
+      return;
+    }
 
     const website = normalizeOptionalUrl(profileForm.website);
     const image = normalizeOptionalUrl(profileForm.image);
