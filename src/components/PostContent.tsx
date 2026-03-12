@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X, ExternalLink } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -6,11 +6,20 @@ import remarkGfm from "remark-gfm";
 interface PostContentProps {
   content: string;
   maxLines?: number;
+  isSensitive?: boolean;
+  sensitiveLabel?: string;
 }
 
-export function PostContent({ content, maxLines = 8 }: PostContentProps) {
+export function PostContent({ content, maxLines = 8, isSensitive = false, sensitiveLabel = "Sensitive" }: PostContentProps) {
   const [expanded, setExpanded] = useState(false);
   const [showImageModal, setShowImageModal] = useState<string | null>(null);
+  const [isRevealed, setIsRevealed] = useState(false);
+
+  useEffect(() => {
+    setIsRevealed(false);
+  }, [content, isSensitive]);
+
+  const shouldBlur = isSensitive && !isRevealed;
   
   // Process content to extract images and separate them
   const processContentForMarkdown = (text: string) => {
@@ -51,6 +60,20 @@ export function PostContent({ content, maxLines = 8 }: PostContentProps) {
 
   return (
     <div className="space-y-3">
+      {shouldBlur && (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            setIsRevealed(true);
+          }}
+          className="w-full rounded-lg border border-border/80 bg-accent/60 px-3 py-2 text-left text-xs font-semibold text-muted-foreground hover:bg-accent transition-colors"
+        >
+          {sensitiveLabel} content hidden. Click to reveal.
+        </button>
+      )}
+
+      <div className={shouldBlur ? "select-none pointer-events-none blur-sm" : ""}>
       {/* Markdown text content */}
       {displayText && (
         <div className={`prose prose-sm dark:prose-invert max-w-none ${shouldTruncate ? 'line-clamp-4' : ''}`}>
@@ -70,7 +93,11 @@ export function PostContent({ content, maxLines = 8 }: PostContentProps) {
       {/* Expand button */}
       {lines.length > maxLines && (
         <button
-          onClick={() => setExpanded(!expanded)}
+          onClick={(event) => {
+            event.stopPropagation();
+            setExpanded(!expanded);
+          }}
+          disabled={shouldBlur}
           className="text-xs font-bold text-[var(--primary)] hover:text-[var(--primary)] transition-colors"
         >
           {expanded ? "Show less" : `Read more (${lines.length - maxLines} more lines)`}
@@ -86,7 +113,11 @@ export function PostContent({ content, maxLines = 8 }: PostContentProps) {
               <div
                 key={index}
                 className="relative aspect-video rounded-lg overflow-hidden bg-accent cursor-pointer group border"
-                onClick={() => setShowImageModal(url)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (shouldBlur) return;
+                  setShowImageModal(url);
+                }}
               >
                 <img
                   src={url}
@@ -109,6 +140,12 @@ export function PostContent({ content, maxLines = 8 }: PostContentProps) {
                 href={url}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (shouldBlur) {
+                    event.preventDefault();
+                  }
+                }}
                 className="flex items-center gap-2 text-xs text-[var(--primary)] hover:underline truncate"
               >
                 <ExternalLink size={12} />
@@ -118,6 +155,7 @@ export function PostContent({ content, maxLines = 8 }: PostContentProps) {
           </div>
         </div>
       )}
+      </div>
 
       {/* Image Modal */}
       {showImageModal && (

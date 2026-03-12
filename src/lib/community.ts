@@ -11,6 +11,8 @@ const CORE_COMMUNITY_TAGS = new Set([
   "flair",
   "open",
   "closed",
+  "spoiler",
+  "nsfw",
 ]);
 
 const normalizeTagValue = (value: string | undefined): string => value?.trim() || "";
@@ -44,6 +46,21 @@ export function isCommunityClosed(community: NDKEvent): boolean {
   return true;
 }
 
+function parseBooleanTag(community: NDKEvent, tagName: string): boolean {
+  const value = community.tags.find((tag) => tag[0] === tagName)?.[1];
+  if (value === undefined || value === "") return community.tags.some((tag) => tag[0] === tagName);
+  const normalized = value.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+export function isCommunitySpoilerDefault(community: NDKEvent): boolean {
+  return parseBooleanTag(community, "spoiler");
+}
+
+export function isCommunityNsfwDefault(community: NDKEvent): boolean {
+  return parseBooleanTag(community, "nsfw");
+}
+
 interface BuildCommunityTagsInput {
   d: string;
   name: string;
@@ -54,6 +71,8 @@ interface BuildCommunityTagsInput {
   moderators?: string[];
   flairs?: string[];
   closed?: boolean;
+  spoiler?: boolean;
+  nsfw?: boolean;
   baseTags?: string[][];
 }
 
@@ -67,6 +86,8 @@ export function buildCommunityTags({
   moderators = [],
   flairs = [],
   closed = true,
+  spoiler = false,
+  nsfw = false,
   baseTags = [],
 }: BuildCommunityTagsInput): string[][] {
   const dedupedModerators = uniqueValues([ownerPubkey, ...moderators]);
@@ -79,6 +100,8 @@ export function buildCommunityTags({
     ["image", image],
     ["rules", rules],
     closed ? ["closed", ""] : ["open", ""],
+    ...(spoiler ? [["spoiler", "1"]] : []),
+    ...(nsfw ? [["nsfw", "1"]] : []),
     ...dedupedFlairs.map((flair) => ["flair", flair]),
     ...dedupedModerators.map((moderator) => ["p", moderator, "", MODERATOR_ROLE]),
   ];
