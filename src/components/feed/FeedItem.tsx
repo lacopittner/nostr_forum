@@ -7,6 +7,7 @@ import { ZapButton } from "../ZapButton";
 import { PostContent } from "../PostContent";
 import { PostActionsMenu } from "../PostActionsMenu";
 import { NDKProfile } from "../../lib/types";
+import { getSensitiveFlags } from "../../lib/contentModeration";
 
 interface FeedItemProps {
   post: NDKEvent;
@@ -27,6 +28,8 @@ interface FeedItemProps {
   onSubmitReply: (post: NDKEvent) => void;
   onEditPost: (postId: string, newContent: string) => Promise<void> | void;
   onDeletePost: (postId: string) => Promise<void> | void;
+  onSetSpoiler: (postId: string, enabled: boolean) => Promise<void> | void;
+  onSetNsfw: (postId: string, enabled: boolean) => Promise<void> | void;
   onToggleMuteUser: (pubkey: string) => Promise<void> | void;
   onToggleMutePost: (postId: string) => Promise<void> | void;
   isAuthorMuted: boolean;
@@ -52,6 +55,8 @@ export function FeedItem({
   onSubmitReply,
   onEditPost,
   onDeletePost,
+  onSetSpoiler,
+  onSetNsfw,
   onToggleMuteUser,
   onToggleMutePost,
   isAuthorMuted,
@@ -135,6 +140,7 @@ export function FeedItem({
   );
 
   const authorName = profile?.displayName || profile?.name || `npub...${post.pubkey.slice(-8)}`;
+  const sensitiveFlags = getSensitiveFlags(post);
 
   const actionDisabledClass = "opacity-40 cursor-not-allowed text-muted-foreground";
 
@@ -195,7 +201,12 @@ export function FeedItem({
           </div>
 
           <div className="mb-3">
-            <PostContent content={post.content} maxLines={6} />
+            <PostContent
+              content={post.content}
+              maxLines={6}
+              isSensitive={sensitiveFlags.spoiler || sensitiveFlags.nsfw}
+              sensitiveLabel={sensitiveFlags.nsfw ? "NSFW" : "Spoiler"}
+            />
           </div>
 
           <div className="flex items-center gap-1">
@@ -274,7 +285,15 @@ export function FeedItem({
 
             {isAuthenticated && (
               <div className="ml-auto" onClick={stopPropagation}>
-                <PostActionsMenu post={post} onEdit={onEditPost} onDelete={onDeletePost} />
+                <PostActionsMenu
+                  post={post}
+                  onEdit={onEditPost}
+                  onDelete={onDeletePost}
+                  onSetSpoiler={onSetSpoiler}
+                  onSetNsfw={onSetNsfw}
+                  isSpoiler={sensitiveFlags.spoiler}
+                  isNsfw={sensitiveFlags.nsfw}
+                />
               </div>
             )}
           </div>

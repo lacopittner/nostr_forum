@@ -22,9 +22,11 @@ import { useGlobalBlocks } from "../hooks/useGlobalBlocks";
 import { ZapButton } from "../components/ZapButton";
 import { FollowButton } from "../components/FollowButton";
 import { EmptyState } from "../components/EmptyState";
+import { PostContent } from "../components/PostContent";
 import { NDKProfile } from "../lib/types";
 import { useToast } from "../lib/toast";
 import { logger } from "../lib/logger";
+import { getSensitiveFlags } from "../lib/contentModeration";
 
 interface ProfileFormState {
   name: string;
@@ -647,27 +649,35 @@ export function ProfilePage() {
               }
             />
           ) : (
-            authoredPosts.map((post) => (
-              <div
-                key={post.id}
-                className="bg-card border rounded-xl shadow-sm p-4 hover:border-[var(--primary)]/20 transition-all cursor-pointer"
-                onClick={() => navigate(`/post/${post.id}`)}
-              >
-                <div className="flex gap-3">
-                  <div className="w-10 flex flex-col items-center space-y-1">
-                    <ArrowBigUp size={20} className="text-muted-foreground" />
-                    <span className="text-xs font-bold">0</span>
-                    <ArrowBigDown size={20} className="text-muted-foreground" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-muted-foreground mb-1">
-                      {new Date((post.created_at || 0) * 1000).toLocaleString()}
-                    </p>
-                    <p className="text-foreground whitespace-pre-wrap">{post.content}</p>
+            authoredPosts.map((post) => {
+              const sensitive = getSensitiveFlags(post);
+              return (
+                <div
+                  key={post.id}
+                  className="bg-card border rounded-xl shadow-sm p-4 hover:border-[var(--primary)]/20 transition-all cursor-pointer"
+                  onClick={() => navigate(`/post/${post.id}`)}
+                >
+                  <div className="flex gap-3">
+                    <div className="w-10 flex flex-col items-center space-y-1">
+                      <ArrowBigUp size={20} className="text-muted-foreground" />
+                      <span className="text-xs font-bold">0</span>
+                      <ArrowBigDown size={20} className="text-muted-foreground" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm text-muted-foreground mb-1">
+                        {new Date((post.created_at || 0) * 1000).toLocaleString()}
+                      </p>
+                      <PostContent
+                        content={post.content}
+                        maxLines={5}
+                        isSensitive={sensitive.spoiler || sensitive.nsfw}
+                        sensitiveLabel={sensitive.nsfw ? "NSFW" : "Spoiler"}
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       )}

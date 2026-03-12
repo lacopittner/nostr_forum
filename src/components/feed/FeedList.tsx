@@ -37,6 +37,8 @@ interface FeedListProps {
   onSubmitReply: (post: NDKEvent) => void;
   onEditPost: (postId: string, newContent: string) => Promise<void> | void;
   onDeletePost: (postId: string) => Promise<void> | void;
+  onSetSpoiler: (postId: string, enabled: boolean) => Promise<void> | void;
+  onSetNsfw: (postId: string, enabled: boolean) => Promise<void> | void;
   onToggleMuteUser: (pubkey: string) => Promise<void> | void;
   onToggleMutePost: (postId: string) => Promise<void> | void;
   isUserMuted: (pubkey: string) => boolean;
@@ -74,6 +76,8 @@ export function FeedList({
   onSubmitReply,
   onEditPost,
   onDeletePost,
+  onSetSpoiler,
+  onSetNsfw,
   onToggleMuteUser,
   onToggleMutePost,
   isUserMuted,
@@ -211,6 +215,8 @@ export function FeedList({
               onSubmitReply={onSubmitReply}
               onEditPost={onEditPost}
               onDeletePost={onDeletePost}
+              onSetSpoiler={onSetSpoiler}
+              onSetNsfw={onSetNsfw}
               onToggleMuteUser={onToggleMuteUser}
               onToggleMutePost={onToggleMutePost}
               isAuthorMuted={isUserMuted(post.pubkey)}

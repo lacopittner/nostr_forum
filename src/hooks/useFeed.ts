@@ -10,7 +10,8 @@ import { useGlobalBlocks } from "./useGlobalBlocks";
 import { logger } from "../lib/logger";
 import { SubscriptionManager } from "../lib/subscriptionManager";
 import { NDKProfile } from "../lib/types";
-import { getCommunityModerators, isCommunityClosed } from "../lib/community";
+import { getCommunityModerators, isCommunityClosed, isCommunityNsfwDefault, isCommunitySpoilerDefault } from "../lib/community";
+import { applySensitiveFlags, getSensitiveFlags } from "../lib/contentModeration";
 
 export type FeedSort = "hot" | "new" | "top";
 export type FeedFilter = "all" | "following";
@@ -20,6 +21,8 @@ export type CommunityEntry = {
   name: string;
   atag: string;
   isClosed: boolean;
+  isSpoilerDefault: boolean;
+  isNsfwDefault: boolean;
   isModerator: boolean;
 };
 
@@ -483,6 +486,8 @@ export function useFeed() {
                 name,
                 atag,
                 isClosed: isCommunityClosed(community),
+                isSpoilerDefault: isCommunitySpoilerDefault(community),
+                isNsfwDefault: isCommunityNsfwDefault(community),
                 isModerator: moderatorSet.has(user.pubkey),
               };
             })
@@ -744,6 +749,60 @@ export function useFeed() {
     [user, posts, ndk, replyingTo, showError, success]
   );
 
+  const handleSetSensitiveFlags = useCallback(
+    async (postId: string, flag: "spoiler" | "nsfw", enabled: boolean) => {
+      if (!user) return;
+      const targetPost = posts.find((post) => post.id === postId);
+      if (!targetPost) return;
+
+      if (targetPost.pubkey !== user.pubkey) {
+        showError("You can only update your own post tags");
+        return;
+      }
+
+      const hasSigner = await requireSigner();
+      if (!hasSigner) {
+        showError("Signing capability required. Please unlock with PIN.");
+        return;
+      }
+
+      const currentFlags = getSensitiveFlags(targetPost);
+      if (currentFlags[flag] === enabled) return;
+
+      try {
+        const deletion = new NDKEvent(ndk);
+        deletion.kind = 5;
+        deletion.content = "Post replaced by updated content warnings";
+        deletion.tags = [["e", targetPost.id]];
+        await deletion.publish();
+
+        const replacement = new NDKEvent(ndk);
+        replacement.kind = NDKKind.Text;
+        replacement.content = targetPost.content;
+        replacement.tags = applySensitiveFlags(
+          targetPost.tags.filter((tag) => tag[0] !== "edited"),
+          { ...currentFlags, [flag]: enabled }
+        );
+        replacement.tags.push(["edited", targetPost.id, new Date().toISOString()]);
+        await replacement.publish();
+
+        seenEventIds.current.delete(getEventDedupKey(targetPost));
+        seenEventIds.current.add(getEventDedupKey(replacement));
+
+        setPosts((prev) => prev.map((post) => (post.id === postId ? replacement : post)));
+        void fetchProfile(replacement.pubkey);
+        subscribeToReactions(replacement.id);
+        void fetchCommentCount(replacement.id);
+
+        success(`${flag.toUpperCase()} ${enabled ? "enabled" : "disabled"}`);
+      } catch (error) {
+        logger.error("Failed to update post warnings", error);
+        showError("Failed to update NSFW/Spoiler state");
+      }
+    },
+    [user, posts, requireSigner, ndk, fetchProfile, subscribeToReactions, fetchCommentCount, success, showError]
+  );
+
   const handleToggleMuteUser = useCallback(
     async (targetPubkey: string) => {
       if (!user) return;
@@ -838,6 +897,8 @@ export function useFeed() {
     handleReply,
     handleEditPost,
     handleDeletePost,
+    handleSetSpoiler: (postId: string, enabled: boolean) => handleSetSensitiveFlags(postId, "spoiler", enabled),
+    handleSetNsfw: (postId: string, enabled: boolean) => handleSetSensitiveFlags(postId, "nsfw", enabled),
     handleToggleMuteUser,
     handleToggleMutePost,
     isUserMuted: isBlocked,

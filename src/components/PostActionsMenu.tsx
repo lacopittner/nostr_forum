@@ -10,6 +10,10 @@ interface PostActionsMenuProps {
   onApprove?: (postId: string) => Promise<void> | void;
   onReject?: (postId: string) => Promise<void> | void;
   onBanUser?: (pubkey: string) => Promise<void> | void;
+  onSetSpoiler?: (postId: string, enabled: boolean) => Promise<void> | void;
+  onSetNsfw?: (postId: string, enabled: boolean) => Promise<void> | void;
+  isSpoiler?: boolean;
+  isNsfw?: boolean;
   moderationState?: "approved" | "rejected" | "pending";
   canModerate?: boolean;
   isComment?: boolean;
@@ -22,6 +26,10 @@ export function PostActionsMenu({
   onApprove,
   onReject,
   onBanUser,
+  onSetSpoiler,
+  onSetNsfw,
+  isSpoiler = false,
+  isNsfw = false,
   moderationState = "approved",
   canModerate = false,
   isComment = false,
@@ -36,6 +44,7 @@ export function PostActionsMenu({
   const canDelete = Boolean(onDelete && (isOwner || canModerate));
   const canEdit = Boolean(onEdit && isOwner);
   const canBan = Boolean(canModerate && onBanUser && user?.pubkey !== post.pubkey);
+  const canSetSensitive = Boolean(onSetSpoiler || onSetNsfw);
   const canApprove = Boolean(canModerate && onApprove);
   const canReject = Boolean(canModerate && onReject);
 
@@ -98,6 +107,26 @@ export function PostActionsMenu({
     setIsProcessing(true);
     try {
       await onBanUser(post.pubkey);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleSetSpoiler = async (enabled: boolean) => {
+    if (!onSetSpoiler) return;
+    setIsProcessing(true);
+    try {
+      await onSetSpoiler(post.id, enabled);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleSetNsfw = async (enabled: boolean) => {
+    if (!onSetNsfw) return;
+    setIsProcessing(true);
+    try {
+      await onSetNsfw(post.id, enabled);
     } finally {
       setIsProcessing(false);
     }
@@ -185,8 +214,34 @@ export function PostActionsMenu({
               </button>
             )}
 
-            {(canApprove || canReject || canBan) && (
+            {(canApprove || canReject || canBan || canSetSensitive) && (
               <div className="border-t border-border/50 my-1" />
+            )}
+
+            {canSetSensitive && onSetSpoiler && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void handleSetSpoiler(!isSpoiler);
+                  setIsOpen(false);
+                }}
+                className="w-full px-3 py-2 text-left text-sm hover:bg-accent transition-colors flex items-center gap-2"
+              >
+                {isSpoiler ? "Remove spoiler" : "Mark as spoiler"}
+              </button>
+            )}
+
+            {canSetSensitive && onSetNsfw && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void handleSetNsfw(!isNsfw);
+                  setIsOpen(false);
+                }}
+                className="w-full px-3 py-2 text-left text-sm hover:bg-accent transition-colors flex items-center gap-2"
+              >
+                {isNsfw ? "Remove NSFW" : "Mark as NSFW"}
+              </button>
             )}
 
             {canApprove && moderationState !== "approved" && (

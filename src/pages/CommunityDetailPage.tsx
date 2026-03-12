@@ -16,9 +16,11 @@ import { SavePostButton } from "../components/SavePostButton";
 import { ZapButton } from "../components/ZapButton";
 import { CreatePost } from "../components/CreatePost";
 import { MarkdownContent } from "../components/MarkdownContent";
+import { PostContent } from "../components/PostContent";
 import { logger } from "../lib/logger";
 import { useToast } from "../lib/toast";
-import { getCommunityFlairs, getCommunityModerators, getCommunityTagValue, isCommunityClosed } from "../lib/community";
+import { getCommunityFlairs, getCommunityModerators, getCommunityTagValue, isCommunityClosed, isCommunityNsfwDefault, isCommunitySpoilerDefault } from "../lib/community";
+import { applySensitiveFlags, getSensitiveFlags, type SensitiveFlags } from "../lib/contentModeration";
 
 const COMMUNITY_APPROVAL_KIND = 4550;
 const COMMUNITY_BLOCK_KIND = 34551;
@@ -88,7 +90,7 @@ const parseCommunitySearchQuery = (rawQuery: string): ParsedCommunitySearch => {
 
 const extractPostSearchTags = (post: NDKEvent): string[] => {
   const tagValues = post.tags
-    .filter((tag) => tag[0] === "t" || tag[0] === "flair")
+    .filter((tag) => tag[0] === "t" || tag[0] === "flair" || tag[0] === "spoiler" || tag[0] === "nsfw" || tag[0] === "content-warning")
     .map((tag) => (tag[1] || "").toLowerCase())
     .filter(Boolean);
 
@@ -118,6 +120,7 @@ export function CommunityDetailPage() {
   // Track edited posts
   const [editedPosts, setEditedPosts] = useState<Set<string>>(new Set());
   const [moderationState, setModerationState] = useState<Record<string, { status: ModerationStatus; createdAt: number }>>({});
+  const [sensitiveOverrides, setSensitiveOverrides] = useState<Record<string, { flags: SensitiveFlags; createdAt: number }>>({});
   
   // Membership
   const { isMember, joinCommunity, leaveCommunity } = useCommunityMembership();
@@ -298,6 +301,29 @@ export function CommunityDetailPage() {
           [targetPostId]: { status, createdAt },
         };
       });
+
+      const hasSpoilerOverride = event.tags.some((tag) => tag[0] === "spoiler");
+      const hasNsfwOverride = event.tags.some((tag) => tag[0] === "nsfw");
+      if (hasSpoilerOverride || hasNsfwOverride) {
+        setSensitiveOverrides((prev) => {
+          const existing = prev[targetPostId];
+          if (existing && createdAt <= existing.createdAt) return prev;
+
+          const nextFlags = {
+            spoiler: hasSpoilerOverride
+              ? event.tags.find((tag) => tag[0] === "spoiler")?.[1] === "1"
+              : existing?.flags.spoiler ?? false,
+            nsfw: hasNsfwOverride
+              ? event.tags.find((tag) => tag[0] === "nsfw")?.[1] === "1"
+              : existing?.flags.nsfw ?? false,
+          };
+
+          return {
+            ...prev,
+            [targetPostId]: { flags: nextFlags, createdAt },
+          };
+        });
+      }
     });
 
     return () => {
@@ -364,6 +390,20 @@ export function CommunityDetailPage() {
     if (moderatorPubkeys.has(post.pubkey)) return "approved";
     return "pending";
   };
+
+  const getEffectiveSensitiveFlags = useCallback((post: NDKEvent): SensitiveFlags => {
+    const fromPost = getSensitiveFlags(post);
+    const fromCommunity = {
+      spoiler: community ? isCommunitySpoilerDefault(community) : false,
+      nsfw: community ? isCommunityNsfwDefault(community) : false,
+    };
+    const override = sensitiveOverrides[post.id]?.flags;
+
+    return {
+      spoiler: override?.spoiler ?? (fromPost.spoiler || fromCommunity.spoiler),
+      nsfw: override?.nsfw ?? (fromPost.nsfw || fromCommunity.nsfw),
+    };
+  }, [community, sensitiveOverrides]);
 
   // Handle edit post
   const handleEditPost = async (postId: string, newContent: string) => {
@@ -508,6 +548,102 @@ export function CommunityDetailPage() {
     }
   };
 
+  const handleSetSensitiveFlag = async (postId: string, flag: keyof SensitiveFlags, enabled: boolean) => {
+    const targetPost = posts.find((post) => post.id === postId);
+    if (!targetPost) return;
+
+    if (!user) return;
+
+    // Author can directly update their own post tags by replacement event.
+    if (targetPost.pubkey === user.pubkey) {
+      const hasSigner = await requireSigner();
+      if (!hasSigner) {
+        showError("Signing capability required. Please unlock with PIN.");
+        return;
+      }
+
+      try {
+        const currentFlags = getSensitiveFlags(targetPost);
+        if (currentFlags[flag] === enabled) return;
+
+        const deletion = new NDKEvent(ndk);
+        deletion.kind = 5;
+        deletion.content = "Post replaced by updated content warnings";
+        deletion.tags = [["e", targetPost.id]];
+        await deletion.publish();
+
+        const replacement = new NDKEvent(ndk);
+        replacement.kind = NDKKind.Text;
+        replacement.content = targetPost.content;
+        replacement.tags = applySensitiveFlags(
+          targetPost.tags.filter((tag) => tag[0] !== "edited"),
+          { ...currentFlags, [flag]: enabled }
+        );
+        replacement.tags.push(["edited", targetPost.id, new Date().toISOString()]);
+        await replacement.publish();
+
+        setPosts((prev) =>
+          prev
+            .map((post) => (post.id === postId ? replacement : post))
+            .sort((a, b) => (b.created_at || 0) - (a.created_at || 0))
+        );
+        setFilteredPosts((prev) =>
+          prev
+            .map((post) => (post.id === postId ? replacement : post))
+            .sort((a, b) => (b.created_at || 0) - (a.created_at || 0))
+        );
+        success(`${flag.toUpperCase()} ${enabled ? "enabled" : "disabled"}`);
+      } catch (error) {
+        logger.error("Failed to update own post warnings", error);
+        showError("Failed to update NSFW/Spoiler flag");
+      }
+      return;
+    }
+
+    if (!isModerator || !communityId || !pubkey) {
+      showError("Only moderators can set NSFW/Spoiler for this post");
+      return;
+    }
+
+    const hasSigner = await requireSigner();
+    if (!hasSigner) {
+      showError("Signing capability required. Please unlock with PIN.");
+      return;
+    }
+
+    try {
+      const event = new NDKEvent(ndk);
+      event.kind = COMMUNITY_APPROVAL_KIND as any;
+      event.content = "sensitive-update";
+      event.tags = [
+        ["a", `34550:${pubkey}:${communityId}`],
+        ["e", postId],
+        ["p", targetPost.pubkey],
+        ["status", getPostModerationStatus(targetPost) === "rejected" ? "rejected" : "approved"],
+        ["spoiler", flag === "spoiler" ? (enabled ? "1" : "0") : getEffectiveSensitiveFlags(targetPost).spoiler ? "1" : "0"],
+        ["nsfw", flag === "nsfw" ? (enabled ? "1" : "0") : getEffectiveSensitiveFlags(targetPost).nsfw ? "1" : "0"],
+      ];
+
+      await event.publish();
+
+      const createdAt = event.created_at || Math.floor(Date.now() / 1000);
+      setSensitiveOverrides((prev) => ({
+        ...prev,
+        [postId]: {
+          flags: {
+            ...getEffectiveSensitiveFlags(targetPost),
+            [flag]: enabled,
+          },
+          createdAt,
+        },
+      }));
+      success(`${flag.toUpperCase()} ${enabled ? "enabled" : "disabled"}`);
+    } catch (error) {
+      logger.error("Failed to update sensitive flags", error);
+      showError("Failed to update NSFW/Spoiler flag");
+    }
+  };
+
   const handleBanUserFromPost = async (targetPubkey: string) => {
     if (!isModerator || !community || !communityId) {
       showError("Only moderators can ban users");
@@ -549,6 +685,8 @@ export function CommunityDetailPage() {
         moderators: [] as string[],
         flairs: [] as string[],
         isClosed: false,
+        isSpoilerDefault: false,
+        isNsfwDefault: false,
       };
     }
     
@@ -560,6 +698,8 @@ export function CommunityDetailPage() {
       moderators: getCommunityModerators(community),
       flairs: getCommunityFlairs(community),
       isClosed: isCommunityClosed(community),
+      isSpoilerDefault: isCommunitySpoilerDefault(community),
+      isNsfwDefault: isCommunityNsfwDefault(community),
     };
   };
 
@@ -819,6 +959,18 @@ export function CommunityDetailPage() {
                 </span>
               )}
 
+              {communityInfo.isSpoilerDefault && (
+                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-amber-400">
+                  Default: spoiler
+                </span>
+              )}
+
+              {communityInfo.isNsfwDefault && (
+                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-red-400">
+                  Default: NSFW
+                </span>
+              )}
+
               {user && !isCurrentUserBlocked() && community && (
                 <button
                   onClick={() => setShowCreatePostForm((prev) => !prev)}
@@ -865,6 +1017,8 @@ export function CommunityDetailPage() {
             atag: `34550:${pubkey}:${communityId}`,
             flairs: communityInfo.flairs,
             isClosed: communityInfo.isClosed,
+            isSpoilerDefault: communityInfo.isSpoilerDefault,
+            isNsfwDefault: communityInfo.isNsfwDefault,
           }}
           isModerator={isModerator}
           onPostCreated={() => {
@@ -935,6 +1089,7 @@ export function CommunityDetailPage() {
 
         {visiblePosts.map((post) => {
           const postStatus = getPostModerationStatus(post);
+          const sensitiveFlags = getEffectiveSensitiveFlags(post);
 
           return (
             <div key={post.id} className="bg-card border rounded-xl shadow-sm hover:border-[var(--primary)]/20 transition-all group">
@@ -992,6 +1147,12 @@ export function CommunityDetailPage() {
                         {postStatus}
                       </span>
                     )}
+                    {sensitiveFlags.spoiler && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400">spoiler</span>
+                    )}
+                    {sensitiveFlags.nsfw && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400">NSFW</span>
+                    )}
                   </div>
                   
                   <PostActionsMenu
@@ -1001,6 +1162,10 @@ export function CommunityDetailPage() {
                     onApprove={(id) => handleModeratePost(id, "approved")}
                     onReject={(id) => handleModeratePost(id, "rejected")}
                     onBanUser={handleBanUserFromPost}
+                    onSetSpoiler={(id, enabled) => handleSetSensitiveFlag(id, "spoiler", enabled)}
+                    onSetNsfw={(id, enabled) => handleSetSensitiveFlag(id, "nsfw", enabled)}
+                    isSpoiler={sensitiveFlags.spoiler}
+                    isNsfw={sensitiveFlags.nsfw}
                     moderationState={postStatus}
                     canModerate={Boolean(isModerator)}
                   />
@@ -1032,7 +1197,11 @@ export function CommunityDetailPage() {
                   </div>
                 </div>
                 
-                <p className="text-sm whitespace-pre-wrap">{post.content}</p>
+                <PostContent
+                  content={post.content}
+                  isSensitive={sensitiveFlags.spoiler || sensitiveFlags.nsfw}
+                  sensitiveLabel={sensitiveFlags.nsfw ? "NSFW" : "Spoiler"}
+                />
               </div>
             </div>
           </div>

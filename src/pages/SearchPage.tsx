@@ -5,6 +5,8 @@ import { Search as SearchIcon, ArrowLeft, Filter, Calendar } from "lucide-react"
 import { useNostr } from "../providers/NostrProvider";
 import { useGlobalBlocks } from "../hooks/useGlobalBlocks";
 import { logger } from "../lib/logger";
+import { PostContent } from "../components/PostContent";
+import { getSensitiveFlagsFromTags } from "../lib/contentModeration";
 
 type SearchScope = "posts" | "users" | "hashtags";
 type SortMode = "relevance" | "newest";
@@ -18,6 +20,8 @@ interface PostResult {
   score: number;
   hashtags: string[];
   communityTags: string[];
+  isSpoiler: boolean;
+  isNsfw: boolean;
 }
 
 interface UserResult {
@@ -218,6 +222,8 @@ export function SearchPage() {
             score,
             hashtags: entry.hashtags,
             communityTags: entry.communityTags,
+            isSpoiler: getSensitiveFlagsFromTags(entry.event.tags).spoiler,
+            isNsfw: getSensitiveFlagsFromTags(entry.event.tags).nsfw,
           };
         })
         .filter((result): result is PostResult => Boolean(result))
@@ -455,9 +461,12 @@ export function SearchPage() {
                   <div className="text-xs text-muted-foreground mb-1">
                     {new Date(result.createdAt * 1000).toLocaleString()} • {result.pubkey.slice(0, 12)}...
                   </div>
-                  <div className="text-sm text-foreground whitespace-pre-wrap line-clamp-3">
-                    {result.content}
-                  </div>
+                  <PostContent
+                    content={result.content}
+                    maxLines={3}
+                    isSensitive={result.isSpoiler || result.isNsfw}
+                    sensitiveLabel={result.isNsfw ? "NSFW" : "Spoiler"}
+                  />
                   {result.hashtags.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1">
                       {result.hashtags.slice(0, 6).map((tag) => (

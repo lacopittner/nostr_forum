@@ -43,6 +43,7 @@ import { ImageUpload } from "../components/ImageUpload";
 import { MarkdownContent } from "../components/MarkdownContent";
 import { logger } from "../lib/logger";
 import { useToast } from "../lib/toast";
+import { applySensitiveFlags, getSensitiveFlags } from "../lib/contentModeration";
 
 interface Comment {
   event: NDKEvent;
@@ -756,6 +757,48 @@ export function PostDetailPage() {
     }
   };
 
+  const handleSetSensitiveFlag = async (flag: "spoiler" | "nsfw", enabled: boolean) => {
+    if (!post || !user) return;
+    if (post.pubkey !== user.pubkey) {
+      showError("You can only update your own post tags");
+      return;
+    }
+
+    const hasSigner = await requireSigner();
+    if (!hasSigner) {
+      showError("Signing capability required. Please unlock with PIN.");
+      return;
+    }
+
+    const currentFlags = getSensitiveFlags(post);
+    if (currentFlags[flag] === enabled) return;
+
+    try {
+      const deletion = new NDKEvent(ndk);
+      deletion.kind = 5;
+      deletion.content = "Post replaced by updated content warnings";
+      deletion.tags = [["e", post.id]];
+      await deletion.publish();
+
+      const replacement = new NDKEvent(ndk);
+      replacement.kind = NDKKind.Text;
+      replacement.content = post.content;
+      replacement.tags = applySensitiveFlags(
+        post.tags.filter((tag) => tag[0] !== "edited"),
+        { ...currentFlags, [flag]: enabled }
+      );
+      replacement.tags.push(["edited", post.id, new Date().toISOString()]);
+      await replacement.publish();
+
+      setPost(replacement);
+      success(`${flag.toUpperCase()} ${enabled ? "enabled" : "disabled"}`);
+      navigate(`/post/${replacement.id}`, { replace: true });
+    } catch (error) {
+      logger.error("Failed to update post warnings", error);
+      showError("Failed to update NSFW/Spoiler flag");
+    }
+  };
+
   const isOwnPost = user && post && post.pubkey === user.pubkey;
   const isPostAuthorBlocked = post ? isBlocked(post.pubkey) : false;
   const isPostMutedById = post ? isEventIdMuted(post.id) : false;
@@ -877,6 +920,7 @@ export function PostDetailPage() {
   }
 
   const totalComments = getTotalCommentCount(comments);
+  const sensitiveFlags = getSensitiveFlags(post);
   const replyPreviewContent = replyImageUrls.length > 0
     ? `${replyContent}${replyContent.trim() ? "\n\n" : ""}${replyImageUrls.join("\n")}`
     : replyContent;
@@ -966,7 +1010,11 @@ export function PostDetailPage() {
             ) : (
               <>
                 <div className="mb-4">
-                  <PostContent content={post.content} />
+                  <PostContent
+                    content={post.content}
+                    isSensitive={sensitiveFlags.spoiler || sensitiveFlags.nsfw}
+                    sensitiveLabel={sensitiveFlags.nsfw ? "NSFW" : "Spoiler"}
+                  />
                 </div>
                 
                 {/* Action bar */}
@@ -1023,6 +1071,26 @@ export function PostDetailPage() {
                             >
                               <Edit3 size={14} />
                               Edit Post
+                            </button>
+                            <button
+                              onClick={() => {
+                                const flags = getSensitiveFlags(post);
+                                void handleSetSensitiveFlag("spoiler", !flags.spoiler);
+                                setShowActionsMenu(false);
+                              }}
+                              className="w-full px-4 py-2 text-left text-sm hover:bg-accent"
+                            >
+                              {getSensitiveFlags(post).spoiler ? "Remove spoiler" : "Mark as spoiler"}
+                            </button>
+                            <button
+                              onClick={() => {
+                                const flags = getSensitiveFlags(post);
+                                void handleSetSensitiveFlag("nsfw", !flags.nsfw);
+                                setShowActionsMenu(false);
+                              }}
+                              className="w-full px-4 py-2 text-left text-sm hover:bg-accent"
+                            >
+                              {getSensitiveFlags(post).nsfw ? "Remove NSFW" : "Mark as NSFW"}
                             </button>
                             <button
                               onClick={() => {

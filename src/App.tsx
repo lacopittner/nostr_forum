@@ -52,6 +52,8 @@ function Feed() {
     handleReply,
     handleEditPost,
     handleDeletePost,
+    handleSetSpoiler,
+    handleSetNsfw,
     handleToggleMuteUser,
     handleToggleMutePost,
     isUserMuted,
@@ -107,6 +109,8 @@ function Feed() {
         onSubmitReply={handleReply}
         onEditPost={handleEditPost}
         onDeletePost={handleDeletePost}
+        onSetSpoiler={handleSetSpoiler}
+        onSetNsfw={handleSetNsfw}
         onToggleMuteUser={handleToggleMuteUser}
         onToggleMutePost={handleToggleMutePost}
         isUserMuted={isUserMuted}
