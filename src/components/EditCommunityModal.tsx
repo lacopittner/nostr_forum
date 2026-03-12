@@ -10,7 +10,7 @@ interface EditCommunityModalProps {
 }
 
 export function EditCommunityModal({ community, exit }: EditCommunityModalProps) {
-  const { ndk, user } = useNostr();
+  const { ndk, user, requireSigner } = useNostr();
   const [name, setName] = useState(community.tags.find(t => t[0] === "name")?.[1] || "");
   const [description, setDescription] = useState(community.tags.find(t => t[0] === "description")?.[1] || "");
   const [image, setImage] = useState(community.tags.find(t => t[0] === "image")?.[1] || "");
@@ -31,6 +31,14 @@ export function EditCommunityModal({ community, exit }: EditCommunityModalProps)
     setIsPublishing(true);
     setError("");
     setSuccess("");
+
+    // Ensure signer is available for signing
+    const hasSigner = await requireSigner();
+    if (!hasSigner) {
+      setError("Signing capability required. Please unlock with PIN.");
+      setIsPublishing(false);
+      return;
+    }
 
     try {
       const updatedEvent = new NDKEvent(ndk);

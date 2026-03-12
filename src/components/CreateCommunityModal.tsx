@@ -17,7 +17,7 @@ interface CreateCommunityModalProps {
 const COMMUNITY_LIST_KIND = 30001;
 
 export function CreateCommunityModal({ exit }: CreateCommunityModalProps) {
-  const { ndk, user } = useNostr();
+  const { ndk, user, requireSigner } = useNostr();
   const [moderators, setModerators] = useState<string[]>([]);
   const [newModerator, setNewModerator] = useState("");
   const [flairs, setFlairs] = useState<string[]>([]);
@@ -48,6 +48,13 @@ export function CreateCommunityModal({ exit }: CreateCommunityModalProps) {
 
   const onSubmit = async (data: CommunityFormData) => {
     if (!user) return;
+
+    // Ensure signer is available for signing
+    const hasSigner = await requireSigner();
+    if (!hasSigner) {
+      alert("Signing capability required. Please unlock with PIN.");
+      return;
+    }
 
     setIsPublishing(true);
 

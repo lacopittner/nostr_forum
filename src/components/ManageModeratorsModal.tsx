@@ -11,7 +11,7 @@ interface ManageModeratorsModalProps {
 }
 
 export function ManageModeratorsModal({ community, exit, onUpdate }: ManageModeratorsModalProps) {
-  const { ndk, user } = useNostr();
+  const { ndk, user, requireSigner } = useNostr();
   const [moderators, setModerators] = useState<string[]>(() => {
     // Extract existing moderators from community event
     return getCommunityModerators(community);
@@ -48,6 +48,14 @@ export function ManageModeratorsModal({ community, exit, onUpdate }: ManageModer
     setIsPublishing(true);
     setError("");
     setSuccess("");
+
+    // Ensure signer is available for signing
+    const hasSigner = await requireSigner();
+    if (!hasSigner) {
+      setError("Signing capability required. Please unlock with PIN.");
+      setIsPublishing(false);
+      return;
+    }
 
     try {
       const updatedEvent = new NDKEvent(ndk);

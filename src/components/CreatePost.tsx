@@ -59,7 +59,7 @@ interface CreatePostProps {
 }
 
 export function CreatePost({ community, communities, isModerator = false, onPostCreated }: CreatePostProps) {
-  const { ndk, user } = useNostr();
+  const { ndk, user, requireSigner } = useNostr();
   const { success, error: showError } = useToast();
   const [content, setContent] = useState("");
   const [isPublishing, setIsPublishing] = useState(false);
@@ -453,6 +453,14 @@ export function CreatePost({ community, communities, isModerator = false, onPost
     }
 
     if (!checkRateLimit()) return;
+
+    // Ensure signer is available for signing
+    const hasSigner = await requireSigner();
+    if (!hasSigner) {
+      setPostError("Signing capability required. Please unlock with PIN.");
+      setIsPublishing(false);
+      return;
+    }
 
     setIsPublishing(true);
     setPostError(null);

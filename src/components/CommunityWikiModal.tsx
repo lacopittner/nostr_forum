@@ -16,7 +16,7 @@ interface CommunityWikiModalProps {
 const WIKI_KIND = 30818;
 
 export function CommunityWikiModal({ community, communityId, isOwner, isModerator, exit }: CommunityWikiModalProps) {
-  const { ndk, user } = useNostr();
+  const { ndk, user, requireSigner } = useNostr();
   const [wikiContent, setWikiContent] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -63,6 +63,13 @@ export function CommunityWikiModal({ community, communityId, isOwner, isModerato
 
   const handleSave = async () => {
     if (!user || !canEdit) return;
+
+    // Ensure signer is available for signing
+    const hasSigner = await requireSigner();
+    if (!hasSigner) {
+      setError("Signing capability required. Please unlock with PIN.");
+      return;
+    }
 
     setIsSaving(true);
     setError("");

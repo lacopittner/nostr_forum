@@ -12,7 +12,7 @@ interface ManageBlockedUsersModalProps {
 const COMMUNITY_BLOCK_KIND = 34551 as any;
 
 export function ManageBlockedUsersModal({ community, exit }: ManageBlockedUsersModalProps) {
-  const { ndk, user } = useNostr();
+  const { ndk, user, requireSigner } = useNostr();
   const [blockedUsers, setBlockedUsers] = useState<Array<{ pubkey: string; reason: string; blocked_at: number }>>([]);
   const [newBlockedUser, setNewBlockedUser] = useState("");
   const [blockReason, setBlockReason] = useState("");
@@ -101,6 +101,14 @@ export function ManageBlockedUsersModal({ community, exit }: ManageBlockedUsersM
     setIsPublishing(true);
     setError("");
 
+    // Ensure signer is available for signing
+    const hasSigner = await requireSigner();
+    if (!hasSigner) {
+      setError("Signing capability required. Please unlock with PIN.");
+      setIsPublishing(false);
+      return;
+    }
+
     try {
       const blockEvent = new NDKEvent(ndk);
       blockEvent.kind = 34551 as any;
@@ -127,6 +135,13 @@ export function ManageBlockedUsersModal({ community, exit }: ManageBlockedUsersM
 
   const handleUnblockUser = async (pubkey: string) => {
     if (!isModerator || !user) return;
+
+    // Ensure signer is available for signing
+    const hasSigner = await requireSigner();
+    if (!hasSigner) {
+      setError("Signing capability required. Please unlock with PIN.");
+      return;
+    }
 
     setIsPublishing(true);
     try {
