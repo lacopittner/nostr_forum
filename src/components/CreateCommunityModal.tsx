@@ -22,6 +22,8 @@ export function CreateCommunityModal({ exit }: CreateCommunityModalProps) {
   const [newModerator, setNewModerator] = useState("");
   const [flairs, setFlairs] = useState<string[]>([]);
   const [newFlair, setNewFlair] = useState("");
+  const [defaultSpoiler, setDefaultSpoiler] = useState(false);
+  const [defaultNsfw, setDefaultNsfw] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [descriptionPreview, setDescriptionPreview] = useState(false);
   const [rulesPreview, setRulesPreview] = useState(false);
@@ -75,6 +77,8 @@ export function CreateCommunityModal({ exit }: CreateCommunityModalProps) {
         moderators,
         flairs,
         closed: true,
+        spoiler: defaultSpoiler,
+        nsfw: defaultNsfw,
       });
 
       await event.publish();
@@ -256,6 +260,28 @@ export function CreateCommunityModal({ exit }: CreateCommunityModalProps) {
                     }}
                   />
                 )}
+              </div>
+
+              <div className="rounded-lg border border-border/70 bg-accent/20 p-3 space-y-3">
+                <p className="text-sm font-semibold">Default Content Warning</p>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={defaultSpoiler}
+                    onChange={(e) => setDefaultSpoiler(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  <span>Mark all posts in this community as spoiler by default</span>
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={defaultNsfw}
+                    onChange={(e) => setDefaultNsfw(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  <span>Mark all posts in this community as NSFW by default</span>
+                </label>
               </div>
 
               {/* Rules */}

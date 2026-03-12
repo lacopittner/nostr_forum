@@ -48,6 +48,8 @@ interface PostCommunityTarget {
   atag: string;
   flairs?: string[];
   isClosed?: boolean;
+  isSpoilerDefault?: boolean;
+  isNsfwDefault?: boolean;
   isModerator?: boolean;
 }
 
@@ -68,6 +70,8 @@ export function CreatePost({ community, communities, isModerator = false, onPost
     community?.atag || ""
   );
   const [selectedFlair, setSelectedFlair] = useState<string | null>(null);
+  const [isSpoiler, setIsSpoiler] = useState(false);
+  const [isNsfw, setIsNsfw] = useState(false);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [showImageUpload, setShowImageUpload] = useState(false);
   const [isFullscreenEditorOpen, setIsFullscreenEditorOpen] = useState(false);
@@ -129,6 +133,19 @@ export function CreatePost({ community, communities, isModerator = false, onPost
   }, [user, selectedCommunityIsClosed, selectedCommunityUserIsModerator]);
 
   const availableFlairs = selectedCommunity?.flairs || [];
+  const communityForcesSpoiler = Boolean(selectedCommunity?.isSpoilerDefault);
+  const communityForcesNsfw = Boolean(selectedCommunity?.isNsfwDefault);
+  const effectiveSpoiler = communityForcesSpoiler || isSpoiler;
+  const effectiveNsfw = communityForcesNsfw || isNsfw;
+
+  useEffect(() => {
+    if (communityForcesSpoiler) {
+      setIsSpoiler(true);
+    }
+    if (communityForcesNsfw) {
+      setIsNsfw(true);
+    }
+  }, [communityForcesSpoiler, communityForcesNsfw]);
 
   useEffect(() => {
     draftRestoredRef.current = false;
@@ -487,6 +504,15 @@ export function CreatePost({ community, communities, isModerator = false, onPost
         tags.push(["flair", selectedFlair]);
       }
 
+      if (effectiveSpoiler) {
+        tags.push(["spoiler", "1"]);
+        tags.push(["content-warning", "spoiler"]);
+      }
+      if (effectiveNsfw) {
+        tags.push(["nsfw", "1"]);
+        tags.push(["content-warning", "nsfw"]);
+      }
+
       event.tags = tags;
       await publishWithRelayFailover(event);
 
@@ -506,6 +532,8 @@ export function CreatePost({ community, communities, isModerator = false, onPost
       // Reset form
       setContent("");
       setSelectedFlair(null);
+      setIsSpoiler(Boolean(selectedCommunity?.isSpoilerDefault));
+      setIsNsfw(Boolean(selectedCommunity?.isNsfwDefault));
       setImageUrls([]);
       setShowImageUpload(false);
       if (typeof window !== "undefined") {
@@ -560,6 +588,9 @@ export function CreatePost({ community, communities, isModerator = false, onPost
             onChange={(e) => {
               setSelectedCommunityAtag(e.target.value);
               setSelectedFlair(null); // Reset flair when changing community
+              const nextCommunity = communities?.find((communityOption) => communityOption.atag === e.target.value);
+              setIsSpoiler(Boolean(nextCommunity?.isSpoilerDefault));
+              setIsNsfw(Boolean(nextCommunity?.isNsfwDefault));
               setPostError(null);
             }}
             disabled={!communities || communities.length === 0}
@@ -706,6 +737,28 @@ export function CreatePost({ community, communities, isModerator = false, onPost
             onSelect={setSelectedFlair}
             compact
           />
+
+          <label className={`flex items-center gap-2 text-xs px-3 py-2 rounded-full ${communityForcesSpoiler ? "bg-amber-500/20 text-amber-200" : "bg-accent/50"}`}>
+            <input
+              type="checkbox"
+              checked={effectiveSpoiler}
+              onChange={(e) => setIsSpoiler(e.target.checked)}
+              disabled={communityForcesSpoiler}
+              className="rounded"
+            />
+            <span>{communityForcesSpoiler ? "Spoiler (forced by community)" : "Spoiler"}</span>
+          </label>
+
+          <label className={`flex items-center gap-2 text-xs px-3 py-2 rounded-full ${communityForcesNsfw ? "bg-red-500/20 text-red-200" : "bg-accent/50"}`}>
+            <input
+              type="checkbox"
+              checked={effectiveNsfw}
+              onChange={(e) => setIsNsfw(e.target.checked)}
+              disabled={communityForcesNsfw}
+              className="rounded"
+            />
+            <span>{communityForcesNsfw ? "NSFW (forced by community)" : "NSFW"}</span>
+          </label>
         </div>
 
         <button

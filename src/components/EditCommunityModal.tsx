@@ -2,7 +2,7 @@ import { useNostr } from "../providers/NostrProvider";
 import { useState } from "react";
 import { NDKEvent } from "@nostr-dev-kit/ndk";
 import { X } from "lucide-react";
-import { buildCommunityTags, getCommunityFlairs, getCommunityModerators } from "../lib/community";
+import { buildCommunityTags, getCommunityFlairs, getCommunityModerators, isCommunityNsfwDefault, isCommunitySpoilerDefault } from "../lib/community";
 
 interface EditCommunityModalProps {
   community: NDKEvent;
@@ -15,6 +15,8 @@ export function EditCommunityModal({ community, exit }: EditCommunityModalProps)
   const [description, setDescription] = useState(community.tags.find(t => t[0] === "description")?.[1] || "");
   const [image, setImage] = useState(community.tags.find(t => t[0] === "image")?.[1] || "");
   const [rules, setRules] = useState(community.tags.find(t => t[0] === "rules")?.[1] || "");
+  const [defaultSpoiler, setDefaultSpoiler] = useState(isCommunitySpoilerDefault(community));
+  const [defaultNsfw, setDefaultNsfw] = useState(isCommunityNsfwDefault(community));
   const [isPublishing, setIsPublishing] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -60,6 +62,8 @@ export function EditCommunityModal({ community, exit }: EditCommunityModalProps)
         moderators,
         flairs,
         closed: true,
+        spoiler: defaultSpoiler,
+        nsfw: defaultNsfw,
         baseTags: community.tags,
       });
 
@@ -186,6 +190,28 @@ export function EditCommunityModal({ community, exit }: EditCommunityModalProps)
               maxLength={500}
             />
             <p className="text-xs text-gray-400 mt-1">{rules.length}/500</p>
+          </div>
+
+          <div className="rounded-lg border border-border/70 bg-accent/20 p-3 space-y-3">
+            <p className="text-sm font-semibold">Default Content Warning</p>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={defaultSpoiler}
+                onChange={(e) => setDefaultSpoiler(e.target.checked)}
+                className="rounded border-border"
+              />
+              <span>Mark all posts in this community as spoiler by default</span>
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={defaultNsfw}
+                onChange={(e) => setDefaultNsfw(e.target.checked)}
+                className="rounded border-border"
+              />
+              <span>Mark all posts in this community as NSFW by default</span>
+            </label>
           </div>
         </div>
 
