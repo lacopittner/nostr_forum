@@ -18,6 +18,8 @@ interface NostrContextType {
   loginWith_nsec: (nsec: string, pin: string) => Promise<boolean>;
   loginWithNip46: (connectionToken: string) => Promise<boolean>;
   unlockWithPin: (pin: string) => Promise<boolean>;
+  requireSigner: () => Promise<boolean>;
+  isViewerMode: boolean;
   requiresPinUnlock: boolean;
   pinUnlockError: string;
   dismissPinUnlock: () => void;
@@ -189,7 +191,9 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [theme, setTheme] = useState<"light" | "dark">(getInitialTheme);
   const [requiresPinUnlock, setRequiresPinUnlock] = useState(false);
   const [pinUnlockError, setPinUnlockError] = useState("");
+  const [isViewerMode, setIsViewerMode] = useState(false);
   const reconnectAttemptsRef = useRef(0);
+  const pendingSignerResolveRef = useRef<((success: boolean) => void) | null>(null);
 
   // Keep context theme in sync with global theme manager.
   useEffect(() => {
@@ -466,9 +470,34 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return null;
   }, [doLogin, stopActiveNip46Signer]);
 
+  const requireSigner = useCallback(async (): Promise<boolean> => {
+    // If signer is already available, we're good
+    if ((ndk as any).signer) {
+      return true;
+    }
+
+    // If user is not in viewer mode or no encrypted nsec, can't proceed
+    if (!isViewerMode || !hasEncryptedNsec()) {
+      logger.warn("[Nostr] requireSigner: no signer available and not in viewer mode or no encrypted nsec");
+      return false;
+    }
+
+    // Create a promise that will be resolved when PIN is entered
+    return new Promise<boolean>((resolve) => {
+      pendingSignerResolveRef.current = resolve;
+      setRequiresPinUnlock(true);
+      setPinUnlockError("");
+    });
+  }, [isViewerMode]);
+
   const dismissPinUnlock = useCallback(() => {
     setRequiresPinUnlock(false);
     setPinUnlockError("");
+    // Reject any pending signer requests
+    if (pendingSignerResolveRef.current) {
+      pendingSignerResolveRef.current(false);
+      pendingSignerResolveRef.current = null;
+    }
   }, []);
 
   const unlockWithPin = useCallback(async (pin: string): Promise<boolean> => {
@@ -499,7 +528,15 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     clearStoredNip46SignerPayload();
     setPinUnlockError("");
     setRequiresPinUnlock(false);
+    setIsViewerMode(false); // Exit viewer mode - signer is now active
     clearLegacyAuthSession();
+    
+    // Resolve any pending signer requests
+    if (pendingSignerResolveRef.current) {
+      pendingSignerResolveRef.current(true);
+      pendingSignerResolveRef.current = null;
+    }
+    
     return true;
   }, [loginWithNsecInternal]);
 
@@ -530,6 +567,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         if (!isActive) return;
 
         if (restoredSession) {
+          setIsViewerMode(false); // NIP-46 has its own signer
           saveStoredNip46SignerPayload(restoredSession.signerPayload);
           if (storedKeys.pub !== restoredSession.pubkey) {
             saveStoredUserKeys({
@@ -559,6 +597,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         if (!isActive) return;
 
         if (restoredPubkey) {
+          setIsViewerMode(false); // Extension has its own signer
           if (storedKeys.pub !== restoredPubkey) {
             saveStoredUserKeys({
               pub: restoredPubkey,
@@ -574,9 +613,28 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       }
 
       if ((storedKeys?.encrypted || (!storedKeys?.sec && !storedKeys?.ext && !storedKeys?.nip46)) && hasEncryptedNsec()) {
-        setRequiresPinUnlock(true);
-        setPinUnlockError("");
-        setUser(undefined);
+        // User has encrypted nsec - login with npub only (viewer mode)
+        // PIN will be requested when signing is needed
+        if (storedKeys?.pub) {
+          logger.info("[Nostr] Restoring session in viewer mode (no signer)");
+          const viewerUser = new NDKUser({ pubkey: storedKeys.pub });
+          viewerUser.ndk = ndk;
+          try {
+            await viewerUser.fetchProfile();
+          } catch (error) {
+            logger.warn("[Nostr] Could not fetch profile, using defaults", error);
+          }
+          setUser(viewerUser);
+          setIsViewerMode(true);
+          setRequiresPinUnlock(false);
+          setPinUnlockError("");
+        } else {
+          // No pubkey stored - show PIN unlock to get it
+          logger.warn("[Nostr] Encrypted nsec found but no pubkey stored");
+          setRequiresPinUnlock(true);
+          setPinUnlockError("");
+          setUser(undefined);
+        }
         return;
       }
 
@@ -601,26 +659,50 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const loginWith_nsec = async (nsec: string, pin: string): Promise<boolean> => {
     try {
       setPinUnlockError("");
-      const pubkey = await loginWithNsecInternal(nsec);
-      if (pubkey) {
-        const encryptedNsec = await encryptNsec(nsec, pin);
-        saveEncryptedNsec(encryptedNsec);
-        saveStoredUserKeys({
-          pub: pubkey,
-          encrypted: true,
-        });
-        clearStoredNip46SignerPayload();
-        setRequiresPinUnlock(false);
-        clearLegacyAuthSession();
-        return true;
+      
+      // Extract pubkey from nsec without setting it as global signer
+      const tempSigner = new NDKPrivateKeySigner(nsec);
+      const tempUser = await tempSigner.user();
+      
+      if (!tempUser) {
+        logger.error("[Nostr] Could not derive user from nsec");
+        return false;
       }
+      
+      const pubkey = tempUser.pubkey;
+      
+      // Encrypt and save nsec for later use
+      const encryptedNsec = await encryptNsec(nsec, pin);
+      saveEncryptedNsec(encryptedNsec);
+      
+      // Create viewer user (no signer yet)
+      const viewerUser = new NDKUser({ pubkey });
+      viewerUser.ndk = ndk;
+      try {
+        await viewerUser.fetchProfile();
+      } catch (error) {
+        logger.warn("[Nostr] Could not fetch profile, using defaults", error);
+      }
+      
+      stopActiveNip46Signer();
+      setUser(viewerUser);
+      setIsViewerMode(true);
+      
+      saveStoredUserKeys({
+        pub: pubkey,
+        encrypted: true,
+      });
+      clearStoredNip46SignerPayload();
+      setRequiresPinUnlock(false);
+      clearLegacyAuthSession();
+      return true;
     } catch (error) {
       logger.error("[Nostr] Failed to encrypt and store nsec", error);
       (ndk as any).signer = undefined;
       setUser(undefined);
+      setIsViewerMode(false);
       return false;
     }
-    return false;
   };
 
   const login = async (): Promise<boolean> => {
@@ -636,6 +718,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       if (pubkey) {
         clearEncryptedNsec();
         clearStoredNip46SignerPayload();
+        setIsViewerMode(false); // Extension has its own signer
         setRequiresPinUnlock(false);
         setPinUnlockError("");
         saveStoredUserKeys({
@@ -660,6 +743,7 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     if (!loginResult) return false;
 
     clearEncryptedNsec();
+    setIsViewerMode(false); // NIP-46 has its own signer
     saveStoredNip46SignerPayload(loginResult.signerPayload);
     saveStoredUserKeys({
       pub: loginResult.pubkey,
@@ -677,8 +761,15 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     clearLegacyAuthSession();
     (ndk as any).signer = undefined;
     setUser(undefined);
+    setIsViewerMode(false);
     setRequiresPinUnlock(false);
     setPinUnlockError("");
+    
+    // Reject any pending signer requests
+    if (pendingSignerResolveRef.current) {
+      pendingSignerResolveRef.current(false);
+      pendingSignerResolveRef.current = null;
+    }
   };
 
   const toggleTheme = () => {
@@ -723,6 +814,8 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         loginWith_nsec,
         loginWithNip46,
         unlockWithPin,
+        requireSigner,
+        isViewerMode,
         requiresPinUnlock,
         pinUnlockError,
         dismissPinUnlock,
