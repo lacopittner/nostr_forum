@@ -4,7 +4,7 @@ import { useNostr } from "../providers/NostrProvider";
 import { logger } from "../lib/logger";
 
 export function useFollows() {
-  const { ndk, user } = useNostr();
+  const { ndk, user, requireSigner } = useNostr();
   const [following, setFollowing] = useState<Set<string>>(new Set());
   const [followers, setFollowers] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
@@ -68,6 +68,10 @@ export function useFollows() {
     async (pubkey: string) => {
       if (!user) return false;
 
+      // Ensure signer is available for signing
+      const hasSigner = await requireSigner();
+      if (!hasSigner) return false;
+
       try {
         // Create new Kind 3 event with updated following list
         const event = new NDKEvent(ndk);
@@ -93,6 +97,10 @@ export function useFollows() {
   const unfollow = useCallback(
     async (pubkey: string) => {
       if (!user) return false;
+
+      // Ensure signer is available for signing
+      const hasSigner = await requireSigner();
+      if (!hasSigner) return false;
 
       try {
         // Create new Kind 3 event with updated following list

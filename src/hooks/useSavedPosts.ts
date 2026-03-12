@@ -18,7 +18,7 @@ interface SavedPost {
 const getStorageKey = (pubkey: string) => `nostr_saved_posts_${pubkey}`;
 
 export function useSavedPosts() {
-  const { ndk, user } = useNostr();
+  const { ndk, user, requireSigner } = useNostr();
   const [savedPosts, setSavedPosts] = useState<SavedPost[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isReady, setIsReady] = useState(false);
@@ -136,15 +136,18 @@ export function useSavedPosts() {
       
       // Try to publish to Nostr (unencrypted for simplicity)
       try {
-        const event = new NDKEvent(ndk);
-        event.kind = BOOKMARKS_KIND;
-        event.content = JSON.stringify(updatedPosts);
-        event.tags = [
-          ["d", SAVED_POSTS_TAG],
-          ["client", "nostr-reddit"]
-        ];
+        const hasSigner = await requireSigner();
+        if (hasSigner) {
+          const event = new NDKEvent(ndk);
+          event.kind = BOOKMARKS_KIND;
+          event.content = JSON.stringify(updatedPosts);
+          event.tags = [
+            ["d", SAVED_POSTS_TAG],
+            ["client", "nostr-reddit"]
+          ];
 
-        await event.publish();
+          await event.publish();
+        }
       } catch (e) {
         console.log("Failed to publish to Nostr, but saved locally");
       }
@@ -168,15 +171,18 @@ export function useSavedPosts() {
       
       // Try to publish to Nostr
       try {
-        const event = new NDKEvent(ndk);
-        event.kind = BOOKMARKS_KIND;
-        event.content = JSON.stringify(updatedPosts);
-        event.tags = [
-          ["d", SAVED_POSTS_TAG],
-          ["client", "nostr-reddit"]
-        ];
+        const hasSigner = await requireSigner();
+        if (hasSigner) {
+          const event = new NDKEvent(ndk);
+          event.kind = BOOKMARKS_KIND;
+          event.content = JSON.stringify(updatedPosts);
+          event.tags = [
+            ["d", SAVED_POSTS_TAG],
+            ["client", "nostr-reddit"]
+          ];
 
-        await event.publish();
+          await event.publish();
+        }
       } catch (e) {
         console.log("Failed to publish to Nostr, but removed locally");
       }

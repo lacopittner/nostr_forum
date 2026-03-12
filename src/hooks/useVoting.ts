@@ -4,7 +4,7 @@ import { useNostr } from "../providers/NostrProvider";
 import { useRateLimit } from "./useRateLimit";
 
 export function useVoting() {
-  const { ndk, user } = useNostr();
+  const { ndk, user, requireSigner } = useNostr();
   const [reactions, setReactions] = useState<Record<string, number>>({});
   const [userVotes, setUserVotes] = useState<Record<string, "UPVOTE" | "DOWNVOTE" | null>>({});
   const [votingIds, setVotingIds] = useState<Set<string>>(new Set());
@@ -99,6 +99,14 @@ export function useVoting() {
     applyOptimisticUpdate(targetId, isUndoing ? "UNDO" : type);
 
     try {
+      // Ensure signer is available for signing
+      const hasSigner = await requireSigner();
+      if (!hasSigner) {
+        setError("Signing capability required. Please unlock with PIN.");
+        revertOptimisticUpdate();
+        return false;
+      }
+
       if (isUndoing) {
         // Delete existing reaction
         if (lastId) {

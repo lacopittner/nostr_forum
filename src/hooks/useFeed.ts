@@ -62,7 +62,7 @@ function mergeUniquePosts(existing: NDKEvent[], incoming: NDKEvent[]): NDKEvent[
 }
 
 export function useFeed() {
-  const { ndk, user } = useNostr();
+  const { ndk, user, requireSigner } = useNostr();
   const { error: showError, success } = useToast();
 
   const [posts, setPosts] = useState<NDKEvent[]>([]);
@@ -613,6 +613,13 @@ export function useFeed() {
     async (post: NDKEvent) => {
       if (!replyContent.trim() || !user || isReplyPublishing) return;
       if (!checkReplyRateLimit()) return;
+
+      // Ensure signer is available for signing
+      const hasSigner = await requireSigner();
+      if (!hasSigner) {
+        showError("Signing capability required. Please unlock with PIN.");
+        return;
+      }
 
       setIsReplyPublishing(true);
       try {

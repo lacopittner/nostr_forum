@@ -6,7 +6,7 @@ import { useNostr } from "../providers/NostrProvider";
 const COMMUNITY_LIST_KIND = 30001;
 
 export function useCommunityMembership() {
-  const { ndk, user } = useNostr();
+  const { ndk, user, requireSigner } = useNostr();
   const [joinedCommunities, setJoinedCommunities] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
 
@@ -58,6 +58,10 @@ export function useCommunityMembership() {
   const joinCommunity = async (communityPubkey: string, communityId: string) => {
     if (!user) return false;
 
+    // Ensure signer is available for signing
+    const hasSigner = await requireSigner();
+    if (!hasSigner) return false;
+
     try {
       const communityATag = `34550:${communityPubkey}:${communityId}`;
       
@@ -88,6 +92,10 @@ export function useCommunityMembership() {
 
   const leaveCommunity = async (communityPubkey: string, communityId: string) => {
     if (!user) return false;
+
+    // Ensure signer is available for signing
+    const hasSigner = await requireSigner();
+    if (!hasSigner) return false;
 
     try {
       const communityATag = `34550:${communityPubkey}:${communityId}`;
