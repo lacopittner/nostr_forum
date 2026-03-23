@@ -216,7 +216,7 @@ export function PwaBanner() {
           <p className="text-sm font-semibold">Install app</p>
           <p className="text-xs text-muted-foreground mt-1">
             {showInstallPrompt
-              ? "Add NostrReddit to your home screen for a native app experience."
+              ? "Add Blaberry to your home screen for a native app experience."
               : showIOSHint
                 ? "On iPhone/iPad, open Share and choose Add to Home Screen."
                 : window.isSecureContext

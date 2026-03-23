@@ -100,7 +100,7 @@ export function CommunitiesPage() {
       event.tags = buildCommunityTags({
         d: communityId,
         name: "Testing Community",
-        description: "A community for testing NostrReddit features. Feel free to post test content here!",
+        description: "A community for testing Blaberry features. Feel free to post test content here!",
         image: "",
         rules: "1. Be respectful\n2. Test freely\n3. Have fun!",
         ownerPubkey: user.pubkey,

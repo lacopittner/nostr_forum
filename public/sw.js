@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v4";
+const CACHE_VERSION = "v5";
 const APP_SHELL_CACHE = `nostr-reddit-shell-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `nostr-reddit-runtime-${CACHE_VERSION}`;
 const IMAGE_CACHE = `nostr-reddit-images-${CACHE_VERSION}`;
@@ -12,10 +12,8 @@ const APP_SHELL_ASSETS = [
   withBase("./"),
   APP_SHELL_INDEX,
   withBase("manifest.json"),
-  withBase("icon-192.png"),
-  withBase("icon-512.png"),
-  withBase("icon-192.svg"),
-  withBase("icon-512.svg"),
+  withBase("logo.png"),
+  withBase("logo-no-bg.png"),
 ];
 
 const CACHES_TO_KEEP = [APP_SHELL_CACHE, RUNTIME_CACHE, IMAGE_CACHE];

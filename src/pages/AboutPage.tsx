@@ -7,9 +7,9 @@ export function AboutPage() {
         <div className="pointer-events-none absolute -right-16 -top-12 h-52 w-52 rounded-full bg-[var(--primary)]/12 blur-3xl" />
         <div className="relative z-10">
           <p className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">About App</p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">About Nostr Frontier</h1>
+          <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">About Blaberry</h1>
           <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-            Nostr Frontier is a community-first forum client built on top of Nostr relays. It brings Reddit-like
+            Blaberry is a community-first forum client built on top of Nostr relays. It brings Reddit-like
             discussion flows to a decentralized network where no single server owns your content.
           </p>
         </div>

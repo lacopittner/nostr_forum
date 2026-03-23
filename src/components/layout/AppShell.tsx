@@ -13,7 +13,6 @@ import {
   MagnifyingGlassIcon,
   MixerHorizontalIcon,
   PersonIcon,
-  RocketIcon,
 } from "@radix-ui/react-icons";
 import { useNostr } from "../../providers/NostrProvider";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -175,11 +174,11 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
             className="group flex items-center gap-2 rounded-2xl px-1 py-1 transition hover:bg-card/60"
             onClick={() => navigate("/")}
           >
-            <span className="relative grid h-10 w-10 place-content-center overflow-hidden rounded-xl border border-[var(--primary)]/30 bg-[linear-gradient(135deg,var(--primary)_0%,hsl(var(--primary-hue)_100%_36%)_100%)] text-white shadow-[0_14px_34px_-20px_var(--primary)]">
-              <RocketIcon className="h-5 w-5" />
+            <span className="relative grid h-10 w-10 place-content-center overflow-hidden rounded-xl border border-[var(--primary)]/30 bg-[linear-gradient(135deg,var(--primary)_0%,hsl(var(--primary-hue)_100%_36%)_100%)] shadow-[0_14px_34px_-20px_var(--primary)]">
+              <img src="/logo-no-bg.png" alt="Blaberry logo" className="h-7 w-7 object-contain" />
             </span>
             <span className="hidden flex-col leading-none sm:flex">
-              <span className="text-[0.95rem] font-extrabold uppercase tracking-[0.08em]">Nostr Frontier</span>
+              <span className="text-[0.95rem] font-extrabold uppercase tracking-[0.08em]">Blaberry</span>
               <span className="text-[0.62rem] font-semibold uppercase tracking-[0.2em] text-muted-foreground/90">
                 Relay-native forum
               </span>
