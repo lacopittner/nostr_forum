@@ -119,7 +119,14 @@ function readStoredUserKeys(): StoredUserKeys | null {
 
 function saveStoredUserKeys(keys: StoredUserKeys) {
   if (typeof window === "undefined") return;
-  localStorage.setItem(USER_KEYS_STORAGE_KEY, JSON.stringify(keys));
+  // Do not persist pubkey locally; keep only auth mode flags.
+  const sanitized: StoredUserKeys = {
+    sec: keys.sec,
+    ext: keys.ext,
+    encrypted: keys.encrypted,
+    nip46: keys.nip46,
+  };
+  localStorage.setItem(USER_KEYS_STORAGE_KEY, JSON.stringify(sanitized));
 }
 
 function clearStoredUserKeys() {
@@ -522,7 +529,6 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
 
     saveStoredUserKeys({
-      pub: pubkey,
       encrypted: true,
     });
     clearStoredNip46SignerPayload();
@@ -569,12 +575,9 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         if (restoredSession) {
           setIsViewerMode(false); // NIP-46 has its own signer
           saveStoredNip46SignerPayload(restoredSession.signerPayload);
-          if (storedKeys.pub !== restoredSession.pubkey) {
-            saveStoredUserKeys({
-              pub: restoredSession.pubkey,
-              nip46: true,
-            });
-          }
+          saveStoredUserKeys({
+            nip46: true,
+          });
           return;
         }
 
@@ -598,12 +601,9 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
         if (restoredPubkey) {
           setIsViewerMode(false); // Extension has its own signer
-          if (storedKeys.pub !== restoredPubkey) {
-            saveStoredUserKeys({
-              pub: restoredPubkey,
-              ext: true,
-            });
-          }
+          saveStoredUserKeys({
+            ext: true,
+          });
           return;
         }
 
@@ -613,28 +613,13 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       }
 
       if ((storedKeys?.encrypted || (!storedKeys?.sec && !storedKeys?.ext && !storedKeys?.nip46)) && hasEncryptedNsec()) {
-        // User has encrypted nsec - login with npub only (viewer mode)
-        // PIN will be requested when signing is needed
-        if (storedKeys?.pub) {
-          logger.info("[Nostr] Restoring session in viewer mode (no signer)");
-          const viewerUser = new NDKUser({ pubkey: storedKeys.pub });
-          viewerUser.ndk = ndk;
-          try {
-            await viewerUser.fetchProfile();
-          } catch (error) {
-            logger.warn("[Nostr] Could not fetch profile, using defaults", error);
-          }
-          setUser(viewerUser);
-          setIsViewerMode(true);
-          setRequiresPinUnlock(false);
-          setPinUnlockError("");
-        } else {
-          // No pubkey stored - show PIN unlock to get it
-          logger.warn("[Nostr] Encrypted nsec found but no pubkey stored");
-          setRequiresPinUnlock(true);
-          setPinUnlockError("");
-          setUser(undefined);
-        }
+        // User has encrypted nsec but pubkey is not persisted.
+        // Ask for PIN to restore signer and derive pubkey.
+        logger.info("[Nostr] Encrypted nsec found; requiring PIN unlock for session restore");
+        setRequiresPinUnlock(true);
+        setPinUnlockError("");
+        setUser(undefined);
+        setIsViewerMode(false);
         return;
       }
 
@@ -689,7 +674,6 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       setIsViewerMode(true);
       
       saveStoredUserKeys({
-        pub: pubkey,
         encrypted: true,
       });
       clearStoredNip46SignerPayload();
@@ -722,7 +706,6 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         setRequiresPinUnlock(false);
         setPinUnlockError("");
         saveStoredUserKeys({
-          pub: pubkey,
           ext: true,
         });
         clearLegacyAuthSession();
@@ -746,7 +729,6 @@ export const NostrProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setIsViewerMode(false); // NIP-46 has its own signer
     saveStoredNip46SignerPayload(loginResult.signerPayload);
     saveStoredUserKeys({
-      pub: loginResult.pubkey,
       nip46: true,
     });
     clearLegacyAuthSession();

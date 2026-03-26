@@ -29,7 +29,7 @@ export const BottomNav: React.FC = () => {
     { icon: HomeIcon, label: "Home", path: "/" },
     { icon: MagnifyingGlassIcon, label: "Search", path: "/search" },
     { icon: null, label: "Create", path: null, isAction: true },
-    { icon: GroupIcon, label: "Groups", path: "/communities" },
+    { icon: GroupIcon, label: "Communities", path: "/communities" },
     { icon: InfoCircledIcon, label: "About", path: "/about" },
     { icon: PersonIcon, label: "Profile", path: user ? `/profile/${user.pubkey}` : "/" },
   ];

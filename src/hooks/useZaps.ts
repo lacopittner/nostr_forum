@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { NDKEvent } from "@nostr-dev-kit/ndk";
 import { useNostr } from "../providers/NostrProvider";
+import { LightningAddress } from "@getalby/lightning-tools/lnurl";
 
 interface ZapReceipt {
   amount: number;
@@ -10,8 +11,14 @@ interface ZapReceipt {
   comment?: string;
 }
 
+interface SendZapResult {
+  success: boolean;
+  paymentUri?: string;
+  warning?: string;
+}
+
 export function useZaps() {
-  const { ndk, user } = useNostr();
+  const { ndk, user, requireSigner } = useNostr();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,8 +79,8 @@ export function useZaps() {
     amount: number, // in sats
     eventId?: string,
     comment?: string
-  ): Promise<boolean> => {
-    if (!user) return false;
+  ): Promise<SendZapResult> => {
+    if (!user) return { success: false };
 
     setIsLoading(true);
     setError(null);
@@ -83,45 +90,78 @@ export function useZaps() {
       
       if (!lnAddress) {
         setError("User has no Lightning address configured");
-        return false;
+        return { success: false };
       }
 
-      // Create zap request event (kind 9734)
-      const zapRequest = new NDKEvent(ndk);
-      zapRequest.kind = 9734;
-      zapRequest.content = comment || "";
-      zapRequest.tags = [
-        ["p", recipientPubkey],
-        ["amount", (amount * 1000).toString()], // amount in millisats
-        ["relays", Array.from(ndk.pool.relays.keys()).join(",")]
-      ];
+      const normalizedLnAddress = lnAddress.trim();
 
-      if (eventId) {
-        zapRequest.tags.push(["e", eventId]);
-      }
+      // Build a QR payload wallets can reliably scan.
+      // Prefer a real BOLT11 invoice for lightning addresses.
+      let paymentUri: string;
+      let fallbackWarning: string | undefined;
 
-      await zapRequest.sign();
-
-      // For now, we'll open the Lightning invoice in a new window
-      // In a real implementation, you'd:
-      // 1. Call the LNURL service to get an invoice
-      // 2. Show QR code or open wallet
-      // 3. Wait for payment confirmation
-      
-      // Simple approach: open lightning: URI or LN address
-      if (lnAddress.includes("@")) {
-        // It's a lightning address (user@domain.com)
-        const [name, domain] = lnAddress.split("@");
-        window.open(`https://${domain}/.well-known/lnurlp/${name}`, "_blank");
+      if (normalizedLnAddress.includes("@")) {
+        try {
+          const ln = new LightningAddress(normalizedLnAddress);
+          await ln.fetch();
+          const invoice = await ln.requestInvoice({
+            satoshi: amount,
+            comment: comment || undefined,
+          });
+          paymentUri = invoice.paymentRequest;
+        } catch {
+          paymentUri = normalizedLnAddress.startsWith("lightning:")
+            ? normalizedLnAddress
+            : `lightning:${normalizedLnAddress}`;
+          fallbackWarning = "Could not fetch invoice from lightning address. Using fallback QR payload.";
+        }
       } else {
-        // It's an LNURL
-        window.open(`lightning:${lnAddress}`, "_blank");
+        paymentUri = normalizedLnAddress.startsWith("lightning:")
+          ? normalizedLnAddress
+          : normalizedLnAddress;
       }
 
-      return true;
+      try {
+        const hasSigner = await requireSigner();
+        if (!hasSigner) {
+          return {
+            success: true,
+            paymentUri,
+            warning: fallbackWarning || "Signer not available. QR generated as regular Lightning payment.",
+          };
+        }
+
+        // Create zap request event (kind 9734)
+        const zapRequest = new NDKEvent(ndk);
+        zapRequest.kind = 9734;
+        zapRequest.content = comment || "";
+        zapRequest.tags = [
+          ["p", recipientPubkey],
+          ["amount", (amount * 1000).toString()], // amount in millisats
+          ["relays", ...Array.from(ndk.pool.relays.keys())],
+        ];
+
+        if (eventId) {
+          zapRequest.tags.push(["e", eventId]);
+        }
+
+        await zapRequest.sign();
+
+        return {
+          success: true,
+          paymentUri,
+          warning: fallbackWarning,
+        };
+      } catch {
+        return {
+          success: true,
+          paymentUri,
+          warning: fallbackWarning || "Zap request signing failed. QR generated as regular Lightning payment.",
+        };
+      }
     } catch (e) {
       setError("Failed to send zap");
-      return false;
+      return { success: false };
     } finally {
       setIsLoading(false);
     }

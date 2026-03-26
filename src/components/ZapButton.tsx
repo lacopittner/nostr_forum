@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Zap, X } from "lucide-react";
 import { useZaps } from "../hooks/useZaps";
+import { QRCodeSVG } from "qrcode.react";
 
 interface ZapButtonProps {
   targetPubkey: string;
@@ -21,12 +22,14 @@ export function ZapButton({
   showAmount = true,
   showText = false
 }: ZapButtonProps) {
-  const { sendZap, getLightningAddress, isLoading } = useZaps();
+  const { sendZap, getLightningAddress, isLoading, error } = useZaps();
   const [isOpen, setIsOpen] = useState(false);
   const [hasLnAddress, setHasLnAddress] = useState<boolean | null>(null);
   const [selectedAmount, setSelectedAmount] = useState(210);
   const [comment, setComment] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [zapQrValue, setZapQrValue] = useState<string | null>(null);
+  const [zapWarning, setZapWarning] = useState<string>("");
 
   const iconSize = size === "lg" ? 24 : size === "md" ? 20 : 16;
 
@@ -38,9 +41,16 @@ export function ZapButton({
 
   const handleZap = async () => {
     setIsSending(true);
-    const success = await sendZap(targetPubkey, selectedAmount, eventId, comment);
+    setZapWarning("");
+    const result = await sendZap(targetPubkey, selectedAmount, eventId, comment);
     setIsSending(false);
-    if (success) {
+    if (result.success) {
+      if (result.paymentUri) {
+        setZapQrValue(result.paymentUri);
+        if (result.warning) {
+          setZapWarning(result.warning);
+        }
+      }
       setIsOpen(false);
       setComment("");
     }
@@ -142,9 +152,52 @@ export function ZapButton({
                   className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-yellow-500 text-black rounded-lg font-bold hover:bg-yellow-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Zap size={20} />
-                  {isSending ? "Opening Wallet..." : `Zap ${formatAmount(selectedAmount)} sats`}
+                  {isSending ? "Preparing QR..." : `Zap ${formatAmount(selectedAmount)} sats`}
                 </button>
+
+                {error && (
+                  <p className="text-xs text-red-400 text-center">{error}</p>
+                )}
               </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {zapQrValue && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4">
+          <div className="bg-card border rounded-xl max-w-sm w-full p-6 shadow-lg">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-black">Zap QR</h2>
+              <button
+                onClick={() => {
+                  setZapQrValue(null);
+                  setZapWarning("");
+                }}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <X size={22} />
+              </button>
+            </div>
+
+            <div className="flex justify-center">
+              <div className="rounded-2xl border border-black/10 bg-white p-3">
+                <QRCodeSVG
+                  value={zapQrValue}
+                  size={220}
+                  level="M"
+                  includeMargin
+                  title="Zap payment QR code"
+                />
+              </div>
+            </div>
+
+            <p className="text-xs text-muted-foreground text-center mt-4 break-all">
+              Scan this QR with your Lightning wallet.
+            </p>
+
+            {zapWarning && (
+              <p className="text-xs text-amber-500 text-center mt-2">{zapWarning}</p>
             )}
           </div>
         </div>
