@@ -11,7 +11,9 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "release:check": "npm run build && npm test -- --run && npm run lint",
+    "release:check:full": "npm run release:check && npm run test:e2e"
   },
   "dependencies": {
     "@getalby/lightning-tools": "^7.0.2",

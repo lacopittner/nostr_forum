@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const PLAYWRIGHT_BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'https://localhost:5173';
+
 export default defineConfig({
   testDir: './playwright_tests',
   fullyParallel: true,
@@ -8,9 +10,10 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: PLAYWRIGHT_BASE_URL,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
+    ignoreHTTPSErrors: true,
   },
   projects: [
     {
@@ -24,7 +27,7 @@ export default defineConfig({
   ],
   webServer: {
     command: 'npm run dev',
-    url: 'http://localhost:5173',
+    url: PLAYWRIGHT_BASE_URL,
     reuseExistingServer: !process.env.CI,
   },
 });

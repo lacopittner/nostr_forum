@@ -1,6 +1,6 @@
 import NDK from "@nostr-dev-kit/ndk";
 
-const DEFAULT_FAILOVER_RELAYS = [
+export const DEFAULT_FAILOVER_RELAYS = [
   "wss://relay.damus.io",
   "wss://relay.nostr.band",
   "wss://nos.lol",

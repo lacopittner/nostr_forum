@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useNostr } from "../providers/NostrProvider";
 import { ArrowLeft, Plus, Trash2, CheckCircle, AlertCircle, Server, RefreshCw } from "lucide-react";
-import { getStoredRelays, saveStoredRelays } from "../lib/ndk";
+import { DEFAULT_FAILOVER_RELAYS, getStoredRelays, saveStoredRelays } from "../lib/ndk";
 
 interface RelayStatus {
   url: string;
@@ -138,11 +138,7 @@ export function RelayManagementPage() {
   };
 
   const addDefaultRelays = () => {
-    const defaults = [
-      "wss://relay.damus.io",
-      "wss://relay.nostr.band",
-      "wss://nos.lol",
-    ];
+    const defaults = [...DEFAULT_FAILOVER_RELAYS];
 
     const existing = new Set(relays.map(r => r.url));
     const urlsToAdd = defaults.filter(url => !existing.has(url));
