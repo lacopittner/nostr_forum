@@ -7,6 +7,8 @@ import { CreateCommunityModal } from "../components/CreateCommunityModal";
 import { useCommunityMembership } from "../hooks/useCommunityMembership";
 import { buildCommunityTags, isCommunityClosed } from "../lib/community";
 
+const COMMUNITY_FETCH_TIMEOUT_MS = 7000;
+
 export function CommunitiesPage() {
   const { ndk, user, requireSigner } = useNostr();
   const navigate = useNavigate();
@@ -18,32 +20,34 @@ export function CommunitiesPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [joiningId, setJoiningId] = useState<string | null>(null);
 
+  const fetchCommunities = async (): Promise<NDKEvent[]> => {
+    try {
+      const events = await Promise.race([
+        ndk.fetchEvents({ kinds: [34550] as any, limit: 100 }, { closeOnEose: true }),
+        new Promise<Set<NDKEvent>>((resolve) => {
+          setTimeout(() => resolve(new Set<NDKEvent>()), COMMUNITY_FETCH_TIMEOUT_MS);
+        }),
+      ]);
+
+      return Array.from(events).sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+    } catch (error) {
+      console.error("Failed to fetch communities", error);
+      return [];
+    }
+  };
+
   useEffect(() => {
-    const fetchCommunities = async () => {
+    const loadCommunities = async () => {
       setIsLoading(true);
       try {
-        const subscription = ndk.subscribe(
-          { kinds: [34550] as any, limit: 100 },
-          { closeOnEose: true }
-        );
-
-        const communityList: NDKEvent[] = [];
-        
-        subscription.on("event", (event: NDKEvent) => {
-          communityList.push(event);
-        });
-
-        subscription.on("eose", () => {
-          setCommunities(communityList.sort((a, b) => (b.created_at || 0) - (a.created_at || 0)));
-          setIsLoading(false);
-        });
-      } catch (error) {
-        console.error("Failed to fetch communities", error);
+        const communityList = await fetchCommunities();
+        setCommunities(communityList);
+      } finally {
         setIsLoading(false);
       }
     };
 
-    fetchCommunities();
+    void loadCommunities();
   }, [ndk]);
 
   // Filter communities by search query
@@ -112,20 +116,8 @@ export function CommunitiesPage() {
       alert("Testing community created! Refresh the page to see it.");
       
       // Refresh communities
-      const subscription = ndk.subscribe(
-        { kinds: [34550] as any, limit: 100 },
-        { closeOnEose: true }
-      );
-
-      const communityList: NDKEvent[] = [];
-      
-      subscription.on("event", (event: NDKEvent) => {
-        communityList.push(event);
-      });
-
-      subscription.on("eose", () => {
-        setCommunities(communityList.sort((a, b) => (b.created_at || 0) - (a.created_at || 0)));
-      });
+      const communityList = await fetchCommunities();
+      setCommunities(communityList);
     } catch (err) {
       console.error("Failed to create testing community", err);
       alert("Failed to create community. Make sure your relay is running.");

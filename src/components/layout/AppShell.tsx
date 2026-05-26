@@ -40,6 +40,15 @@ interface TrendingCommunity extends Community {
   createdAt: number;
 }
 
+const TRENDING_FETCH_TIMEOUT_MS = 4500;
+const TRENDING_COMMUNITY_LIMIT = 60;
+const TRENDING_MEMBERSHIP_LIMIT = 400;
+const TRENDING_POST_LIMIT = 500;
+const TRENDING_DEEP_FETCH_TIMEOUT_MS = 9000;
+const TRENDING_DEEP_COMMUNITY_LIMIT = 180;
+const TRENDING_DEEP_MEMBERSHIP_LIMIT = 1200;
+const TRENDING_DEEP_POST_LIMIT = 1500;
+
 type IconType = React.ElementType<{ className?: string }>;
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -446,102 +455,155 @@ const TrendingCommunities: React.FC = () => {
   useEffect(() => {
     let isActive = true;
 
+    const fetchEventsWithTimeout = async (
+      filter: Parameters<typeof ndk.fetchEvents>[0],
+      timeoutMs: number
+    ): Promise<Set<NDKEvent>> => {
+      try {
+        return await Promise.race([
+          ndk.fetchEvents(filter, { closeOnEose: true }),
+          new Promise<Set<NDKEvent>>((resolve) => {
+            setTimeout(() => resolve(new Set<NDKEvent>()), timeoutMs);
+          }),
+        ]);
+      } catch {
+        return new Set<NDKEvent>();
+      }
+    };
+
+    const rankCommunities = (
+      communityEvents: Set<NDKEvent>,
+      membershipEvents: Set<NDKEvent>,
+      recentPosts: Set<NDKEvent>
+    ): TrendingCommunity[] => {
+      const communityList = Array.from(communityEvents).map((event) => {
+        const id = event.tags.find((tag) => tag[0] === "d")?.[1] || event.id;
+        const name = event.tags.find((tag) => tag[0] === "name")?.[1] || "Unnamed";
+        const description = event.tags.find((tag) => tag[0] === "description")?.[1] || "";
+
+        return {
+          id,
+          pubkey: event.pubkey,
+          name,
+          description,
+          memberCount: 0,
+          weeklyPosts: 0,
+          activeAuthors: 0,
+          score: 0,
+          createdAt: event.created_at || 0,
+        } satisfies TrendingCommunity;
+      });
+
+      const latestMembershipByAuthor = new Map<string, NDKEvent>();
+      Array.from(membershipEvents).forEach((event) => {
+        const existing = latestMembershipByAuthor.get(event.pubkey);
+        if (!existing || (event.created_at || 0) > (existing.created_at || 0)) {
+          latestMembershipByAuthor.set(event.pubkey, event);
+        }
+      });
+
+      const memberCounts = new Map<string, number>();
+      latestMembershipByAuthor.forEach((event) => {
+        event.tags
+          .filter((tag) => tag[0] === "a" && tag[1]?.startsWith("34550:"))
+          .forEach((tag) => {
+            const atag = tag[1];
+            memberCounts.set(atag, (memberCounts.get(atag) || 0) + 1);
+          });
+      });
+
+      const sevenDaysAgo = Math.floor(Date.now() / 1000) - 7 * 24 * 60 * 60;
+      const communityActivity = new Map<string, { posts: number; authors: Set<string> }>();
+
+      Array.from(recentPosts).forEach((event) => {
+        const createdAt = event.created_at || 0;
+        if (createdAt < sevenDaysAgo) return;
+
+        const communityTag = event.tags.find((tag) => tag[0] === "a" && tag[1]?.startsWith("34550:"))?.[1];
+        if (!communityTag) return;
+
+        const existing = communityActivity.get(communityTag) || { posts: 0, authors: new Set<string>() };
+        existing.posts += 1;
+        existing.authors.add(event.pubkey);
+        communityActivity.set(communityTag, existing);
+      });
+
+      const withStats = communityList
+        .map((community) => {
+          const atag = `34550:${community.pubkey}:${community.id}`;
+          const members = memberCounts.get(atag) || 0;
+          const activity = communityActivity.get(atag);
+          const weeklyPosts = activity?.posts || 0;
+          const activeAuthors = activity?.authors.size || 0;
+          const score = weeklyPosts * 2 + activeAuthors + Math.min(members, 100) * 0.1;
+
+          return {
+            ...community,
+            memberCount: members,
+            weeklyPosts,
+            activeAuthors,
+            score,
+          };
+        })
+        .sort((a, b) => {
+          if (b.score !== a.score) return b.score - a.score;
+          if (b.weeklyPosts !== a.weeklyPosts) return b.weeklyPosts - a.weeklyPosts;
+          return b.createdAt - a.createdAt;
+        });
+
+      const fallbackList = [...withStats]
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(0, 5);
+
+      const trendingList = withStats.filter((community) => community.score > 0).slice(0, 5);
+      return trendingList.length > 0 ? trendingList : fallbackList;
+    };
+
     const loadTrendingCommunities = async () => {
       setIsLoading(true);
 
       try {
-        const [communityEvents, membershipEvents, recentPosts] = await Promise.all([
-          ndk.fetchEvents({ kinds: [34550 as any], limit: 100 }, { closeOnEose: true }),
-          ndk.fetchEvents(
-            { kinds: [30001], "#d": ["communities"], limit: 1000 },
-            { closeOnEose: true }
+        const [fastCommunityEvents, fastMembershipEvents, fastRecentPosts] = await Promise.all([
+          fetchEventsWithTimeout({ kinds: [34550 as any], limit: TRENDING_COMMUNITY_LIMIT }, TRENDING_FETCH_TIMEOUT_MS),
+          fetchEventsWithTimeout(
+            { kinds: [30001], "#d": ["communities"], limit: TRENDING_MEMBERSHIP_LIMIT },
+            TRENDING_FETCH_TIMEOUT_MS
           ),
-          ndk.fetchEvents({ kinds: [NDKKind.Text], limit: 1500 }, { closeOnEose: true }),
+          fetchEventsWithTimeout({ kinds: [NDKKind.Text], limit: TRENDING_POST_LIMIT }, TRENDING_FETCH_TIMEOUT_MS),
         ]);
 
-        const communityList = Array.from(communityEvents).map((event) => {
-          const id = event.tags.find((tag) => tag[0] === "d")?.[1] || event.id;
-          const name = event.tags.find((tag) => tag[0] === "name")?.[1] || "Unnamed";
-          const description = event.tags.find((tag) => tag[0] === "description")?.[1] || "";
-
-          return {
-            id,
-            pubkey: event.pubkey,
-            name,
-            description,
-            memberCount: 0,
-            weeklyPosts: 0,
-            activeAuthors: 0,
-            score: 0,
-            createdAt: event.created_at || 0,
-          } satisfies TrendingCommunity;
-        });
-
-        const latestMembershipByAuthor = new Map<string, NDKEvent>();
-        Array.from(membershipEvents).forEach((event) => {
-          const existing = latestMembershipByAuthor.get(event.pubkey);
-          if (!existing || (event.created_at || 0) > (existing.created_at || 0)) {
-            latestMembershipByAuthor.set(event.pubkey, event);
-          }
-        });
-
-        const memberCounts = new Map<string, number>();
-        latestMembershipByAuthor.forEach((event) => {
-          event.tags
-            .filter((tag) => tag[0] === "a" && tag[1]?.startsWith("34550:"))
-            .forEach((tag) => {
-              const atag = tag[1];
-              memberCounts.set(atag, (memberCounts.get(atag) || 0) + 1);
-            });
-        });
-
-        const sevenDaysAgo = Math.floor(Date.now() / 1000) - 7 * 24 * 60 * 60;
-        const communityActivity = new Map<string, { posts: number; authors: Set<string> }>();
-
-        Array.from(recentPosts).forEach((event) => {
-          const createdAt = event.created_at || 0;
-          if (createdAt < sevenDaysAgo) return;
-
-          const communityTag = event.tags.find((tag) => tag[0] === "a" && tag[1]?.startsWith("34550:"))?.[1];
-          if (!communityTag) return;
-
-          const existing = communityActivity.get(communityTag) || { posts: 0, authors: new Set<string>() };
-          existing.posts += 1;
-          existing.authors.add(event.pubkey);
-          communityActivity.set(communityTag, existing);
-        });
-
-        const withStats = communityList
-          .map((community) => {
-            const atag = `34550:${community.pubkey}:${community.id}`;
-            const members = memberCounts.get(atag) || 0;
-            const activity = communityActivity.get(atag);
-            const weeklyPosts = activity?.posts || 0;
-            const activeAuthors = activity?.authors.size || 0;
-            const score = weeklyPosts * 2 + activeAuthors + Math.min(members, 100) * 0.1;
-
-            return {
-              ...community,
-              memberCount: members,
-              weeklyPosts,
-              activeAuthors,
-              score,
-            };
-          })
-          .sort((a, b) => {
-            if (b.score !== a.score) return b.score - a.score;
-            if (b.weeklyPosts !== a.weeklyPosts) return b.weeklyPosts - a.weeklyPosts;
-            return b.createdAt - a.createdAt;
-          });
-
-        const fallbackList = [...withStats]
-          .sort((a, b) => b.createdAt - a.createdAt)
-          .slice(0, 5);
-
-        const trendingList = withStats.filter((community) => community.score > 0).slice(0, 5);
+        const firstPass = rankCommunities(fastCommunityEvents, fastMembershipEvents, fastRecentPosts);
         if (isActive) {
-          setCommunities(trendingList.length > 0 ? trendingList : fallbackList);
+          setCommunities(firstPass);
         }
+
+        // Run deeper scan in background to catch communities outside fast limits.
+        void Promise.all([
+          fetchEventsWithTimeout(
+            { kinds: [34550 as any], limit: TRENDING_DEEP_COMMUNITY_LIMIT },
+            TRENDING_DEEP_FETCH_TIMEOUT_MS
+          ),
+          fetchEventsWithTimeout(
+            { kinds: [30001], "#d": ["communities"], limit: TRENDING_DEEP_MEMBERSHIP_LIMIT },
+            TRENDING_DEEP_FETCH_TIMEOUT_MS
+          ),
+          fetchEventsWithTimeout(
+            { kinds: [NDKKind.Text], limit: TRENDING_DEEP_POST_LIMIT },
+            TRENDING_DEEP_FETCH_TIMEOUT_MS
+          ),
+        ])
+          .then(([deepCommunityEvents, deepMembershipEvents, deepRecentPosts]) => {
+            if (!isActive) return;
+            const deepPass = rankCommunities(deepCommunityEvents, deepMembershipEvents, deepRecentPosts);
+            setCommunities((prev) => {
+              const prevKey = prev.map((item) => `${item.pubkey}:${item.id}`).join("|");
+              const nextKey = deepPass.map((item) => `${item.pubkey}:${item.id}`).join("|");
+              return prevKey === nextKey ? prev : deepPass;
+            });
+          })
+          .catch(() => {
+            // Keep fast pass results if deep scan fails.
+          });
       } catch (error) {
         logger.error("Failed to load trending communities", error);
         if (isActive) {

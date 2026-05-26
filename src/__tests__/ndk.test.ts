@@ -1,19 +1,8 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest';
-import { getStoredRelays, saveStoredRelays } from '../lib/ndk';
+import { DEFAULT_FAILOVER_RELAYS, getStoredRelays, saveStoredRelays } from '../lib/ndk';
 
 const getExpectedDefaultRelays = (): string[] => {
-  const configured = (import.meta.env.VITE_NOSTR_RELAYS ?? '')
-    .split(',')
-    .map((relay: string) => relay.trim())
-    .filter((relay: string) => relay.length > 0);
-
-  return configured
-    .map((relay: string) => {
-      if (!relay.startsWith('/')) return relay;
-      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      return `${wsProtocol}//${window.location.host}${relay}`;
-    })
-    .filter((relay: string) => relay.startsWith('ws://') || relay.startsWith('wss://'));
+  return [...DEFAULT_FAILOVER_RELAYS];
 };
 
 describe('NDK Utils', () => {

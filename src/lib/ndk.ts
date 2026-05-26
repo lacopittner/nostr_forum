@@ -6,6 +6,8 @@ export const DEFAULT_FAILOVER_RELAYS = [
   "wss://nos.lol",
 ];
 
+const ALLOW_LOCAL_RELAYS = import.meta.env.VITE_ALLOW_LOCAL_RELAYS === "true";
+
 const parseRelayList = (value?: string): string[] => {
   if (!value) return [];
   return value
@@ -38,11 +40,32 @@ const ensureWebsocketScheme = (relay: string): string => {
   return `wss://${trimmed}`;
 };
 
+const isLocalDevelopmentRelay = (relay: string): boolean => {
+  try {
+    const parsed = new URL(relay);
+    const host = parsed.hostname.toLowerCase();
+    const isLoopbackHost = host === "localhost" || host === "127.0.0.1" || host === "::1";
+
+    if (isLoopbackHost) return true;
+
+    if (typeof window !== "undefined") {
+      const sameHost = parsed.host === window.location.host;
+      const isViteRelayProxyPath = parsed.pathname.startsWith("/relay") || parsed.pathname.startsWith("/relay2");
+      if (sameHost && isViteRelayProxyPath) return true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+};
+
 const normalizeRelayList = (relays: string[]): string[] => {
   const normalized = relays
     .map(resolveRelativeRelayUrl)
     .map(ensureWebsocketScheme)
-    .filter(isWebSocketRelayUrl);
+    .filter(isWebSocketRelayUrl)
+    .filter((relay) => ALLOW_LOCAL_RELAYS || !isLocalDevelopmentRelay(relay));
 
   return Array.from(new Set(normalized));
 };
@@ -65,6 +88,17 @@ export const getStoredRelays = (): string[] => {
       const normalizedStored = normalizeRelayList(
         parsed.filter((relay): relay is string => typeof relay === "string")
       );
+
+      // Auto-migrate stale/invalid local relay entries out of storage.
+      if (normalizedStored.length > 0) {
+        const rawStoredList = parsed.filter((relay): relay is string => typeof relay === "string");
+        const rawSorted = [...new Set(rawStoredList.map((relay) => relay.trim()))].sort();
+        const normalizedSorted = [...normalizedStored].sort();
+        if (JSON.stringify(rawSorted) !== JSON.stringify(normalizedSorted)) {
+          localStorage.setItem("nostr_relays", JSON.stringify(normalizedStored));
+        }
+      }
+
       return normalizedStored.length > 0 ? normalizedStored : defaultRelays;
     } catch {
       return defaultRelays;
